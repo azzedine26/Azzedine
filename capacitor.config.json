@@ -1,0 +1,9 @@
+{
+  "appId": "com.ostaddz.app",
+  "appName": "Ostad DZ",
+  "webDir": "dist",
+  "bundledWebRuntime": false,
+  "android": {
+    "allowMixedContent": true
+  }
+}
