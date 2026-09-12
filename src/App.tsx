@@ -23,6 +23,7 @@ import { AddReminderModal } from './components/modals/AddReminderModal';
 import { GradeEntryModal } from './components/modals/GradeEntryModal';
 import { ConfirmDeleteModal } from './components/modals/ConfirmDeleteModal';
 import { SubjectSettingModal } from './components/modals/SubjectSettingModal';
+import { EducationalStageModal } from './components/modals/EducationalStageModal';
 import { useTheme } from './hooks/useTheme';
 import { databaseService } from './db/databaseService';
 import { 
@@ -39,7 +40,8 @@ import {
   SubjectSetting,
   AttendanceRecord,
   ReminderItem,
-  LibraryItem
+  LibraryItem,
+  EducationalStage
 } from './types';
 import { INITIAL_TEACHER_PROFILE } from './data/algerianData';
 import { CheckCircle2 } from 'lucide-react';
@@ -100,6 +102,9 @@ export default function App() {
 
   const [isAddReminderOpen, setIsAddReminderOpen] = useState(false);
   const [editingReminder, setEditingReminder] = useState<ReminderItem | null>(null);
+
+  // Educational Stage Modal State
+  const [isEducationalStageModalOpen, setIsEducationalStageModalOpen] = useState(false);
 
   // Confirmation Modal
   const [deleteModal, setDeleteModal] = useState<{
@@ -163,6 +168,11 @@ export default function App() {
       setReminders(fetchedReminders);
       setLibraryItems(fetchedLibraryItems);
 
+      // Check if educational stage has not been set yet
+      if (!fetchedSettings.educationalStage) {
+        setIsEducationalStageModalOpen(true);
+      }
+
       // Check if first-ever visit
       if (!fetchedSettings.hasSeenSplash && !localStorage.getItem('ostad_dz_seen_splash')) {
         setCurrentTab('splash');
@@ -185,6 +195,60 @@ export default function App() {
     setHasVisitedSplash(true);
     localStorage.setItem('ostad_dz_seen_splash', 'true');
     await databaseService.saveSettings({ hasSeenSplash: true });
+    if (!settings.educationalStage) {
+      setIsEducationalStageModalOpen(true);
+    }
+  };
+
+  // ================= Educational Stage System =================
+  const handleSaveEducationalStage = async (
+    stage: EducationalStage, 
+    specializedSubject: string
+  ) => {
+    try {
+      await databaseService.saveSettings({
+        educationalStage: stage,
+        profile: {
+          ...settings.profile,
+          stage,
+          subject: specializedSubject,
+        },
+        hasSeenSplash: true,
+      });
+
+      if (specializedSubject.trim()) {
+        const existing = await databaseService.getAllSubjectSettings();
+        const exists = existing.some((s) => s.name.trim().toLowerCase() === specializedSubject.trim().toLowerCase());
+        if (!exists) {
+          await databaseService.saveSubjectSetting({
+            id: `subj-spec-${Date.now()}`,
+            name: specializedSubject.trim(),
+            coefficient: 2,
+            calculationMethod: {
+              method: 'tests_avg_plus_exam_x2_div_3',
+            },
+          });
+        }
+      }
+
+      const [freshSettings, freshSubjects] = await Promise.all([
+        databaseService.getSettings(),
+        databaseService.getAllSubjectSettings(),
+      ]);
+      setSettings(freshSettings);
+      setSubjectSettings(freshSubjects);
+      setIsEducationalStageModalOpen(false);
+      setHasVisitedSplash(true);
+      localStorage.setItem('ostad_dz_seen_splash', 'true');
+      showToast(
+        `تم حفظ وضبط الطور التعليمي (${
+          stage === 'middle' ? 'التعليم المتوسط' : 'التعليم الثانوي'
+        }) بنجاح.`
+      );
+    } catch (err) {
+      console.error('Error saving educational stage:', err);
+      showToast('حدث خطأ أثناء حفظ الطور التعليمي.');
+    }
   };
 
   // ================= Class Operations =================
@@ -622,10 +686,10 @@ export default function App() {
   };
 
   return (
-    <div className="min-h-screen w-full max-w-[100vw] bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-100 flex flex-col font-sans overflow-x-hidden relative">
+    <div className="min-h-screen w-full bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-100 flex flex-col font-sans relative">
       {/* Content wrapper with right padding for the fixed vertical sidebar */}
       <div
-        className={`flex-1 flex flex-col min-w-0 w-full max-w-full overflow-x-hidden transition-[padding] duration-300 ease-in-out ${
+        className={`flex-1 flex flex-col min-w-0 w-full transition-[padding] duration-300 ease-in-out ${
           isDesktopSidebarCollapsed ? 'md:pr-20' : 'md:pr-64'
         } pr-16`}
       >
@@ -651,7 +715,7 @@ export default function App() {
         />
 
         {/* 3. Main Views Container */}
-        <main className="flex-1 max-w-7xl mx-auto w-full min-w-0 px-3 sm:px-6 lg:px-8 pt-4 sm:pt-6 pb-16">
+        <main className="flex-1 max-w-7xl mx-auto w-full min-w-0 px-3 sm:px-6 lg:px-8 pt-4 sm:pt-6 pb-28 sm:pb-16">
           {isLoading ? (
             <div className="py-20 text-center flex flex-col items-center justify-center gap-3">
               <div className="w-10 h-10 border-3 border-emerald-600 border-t-transparent rounded-full animate-spin" />
@@ -825,6 +889,8 @@ export default function App() {
                 theme={theme}
                 onThemeChange={setTheme}
                 onSaveProfile={handleSaveProfile}
+                onSaveStage={handleSaveEducationalStage}
+                onOpenStageWizard={() => setIsEducationalStageModalOpen(true)}
                 onExportBackup={handleExportBackup}
                 onImportBackup={handleImportBackup}
                 onResetToSampleData={handleResetToSample}
@@ -861,6 +927,20 @@ export default function App() {
       />
 
       {/* 5. Modals */}
+      <EducationalStageModal
+        isOpen={isEducationalStageModalOpen}
+        isFirstLaunch={!settings.educationalStage}
+        currentStage={settings.educationalStage || 'secondary'}
+        currentSpecializedSubject={settings.profile.subject}
+        currentPrimarySubjects={settings.primarySubjects || []}
+        onSave={handleSaveEducationalStage}
+        onClose={() => {
+          if (settings.educationalStage) {
+            setIsEducationalStageModalOpen(false);
+          }
+        }}
+      />
+
       <AddClassModal
         isOpen={isAddClassOpen}
         onClose={() => {
@@ -870,6 +950,9 @@ export default function App() {
         onSave={handleSaveClass}
         editingClass={editingClass}
         defaultAcademicYear={settings.profile.academicYear}
+        defaultStage={settings.educationalStage || 'secondary'}
+        defaultSubject={settings.profile.subject}
+        primarySubjects={settings.primarySubjects || []}
       />
 
       <AddStudentModal
@@ -893,6 +976,7 @@ export default function App() {
         onSave={handleSaveSession}
         classes={classes}
         defaultDay={sessionDefaultDay}
+        defaultSubject={settings.profile.subject || 'الرياضيات'}
         editingSession={editingSession}
       />
 
@@ -905,6 +989,7 @@ export default function App() {
         onSave={handleSaveLesson}
         classes={classes}
         defaultClassId={defaultLessonClassId}
+        defaultSubject={settings.profile.subject || 'الرياضيات'}
         editingLesson={editingLesson}
       />
 
@@ -917,6 +1002,7 @@ export default function App() {
         onSave={handleSaveAssessment}
         classes={classes}
         defaultClassId={defaultAssessmentClassId}
+        defaultSubject={settings.profile.subject || 'الرياضيات'}
         editingAssessment={editingAssessment}
       />
 

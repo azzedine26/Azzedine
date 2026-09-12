@@ -1,7 +1,12 @@
-import React, { useState, useEffect } from 'react';
-import { X, GraduationCap, Check } from 'lucide-react';
+import React, { useState, useEffect, useMemo } from 'react';
+import { X, GraduationCap, Check, BookOpen } from 'lucide-react';
 import { ClassItem, EducationalStage } from '../../types';
-import { CLASS_COLORS, COMMON_SUBJECTS, EDUCATIONAL_STAGES } from '../../data/algerianData';
+import { 
+  CLASS_COLORS, 
+  COMMON_SUBJECTS, 
+  EDUCATIONAL_STAGES,
+  getSubjectsForGradeAndStage
+} from '../../data/algerianData';
 
 interface AddClassModalProps {
   isOpen: boolean;
@@ -9,6 +14,9 @@ interface AddClassModalProps {
   onSave: (classData: Omit<ClassItem, 'createdAt' | 'updatedAt'> | ClassItem) => Promise<void>;
   editingClass?: ClassItem | null;
   defaultAcademicYear: string;
+  defaultStage?: EducationalStage;
+  defaultSubject?: string;
+  primarySubjects?: string[];
 }
 
 export const AddClassModal: React.FC<AddClassModalProps> = ({
@@ -17,12 +25,13 @@ export const AddClassModal: React.FC<AddClassModalProps> = ({
   onSave,
   editingClass,
   defaultAcademicYear,
+  defaultStage = 'secondary',
+  defaultSubject = 'الرياضيات',
 }) => {
   const [name, setName] = useState('');
-  const [stage, setStage] = useState<EducationalStage>('secondary');
+  const [stage, setStage] = useState<EducationalStage>(defaultStage);
   const [grade, setGrade] = useState('');
-  const [subject, setSubject] = useState(COMMON_SUBJECTS[0]);
-  const [customSubject, setCustomSubject] = useState('');
+  const [subject, setSubject] = useState(defaultSubject || 'الرياضيات');
   const [room, setRoom] = useState('');
   const [academicYear, setAcademicYear] = useState(defaultAcademicYear || '2024 - 2025');
   const [color, setColor] = useState(CLASS_COLORS[0]);
@@ -30,36 +39,33 @@ export const AddClassModal: React.FC<AddClassModalProps> = ({
   const [error, setError] = useState('');
 
   // Update grade options when stage changes
-  const currentStageConfig = EDUCATIONAL_STAGES.find((s) => s.id === stage) || EDUCATIONAL_STAGES[2];
+  const currentStageConfig = EDUCATIONAL_STAGES.find((s) => s.id === stage) || EDUCATIONAL_STAGES[0];
 
   useEffect(() => {
     if (editingClass) {
       setName(editingClass.name);
       setStage(editingClass.stage);
       setGrade(editingClass.grade);
-      if (COMMON_SUBJECTS.includes(editingClass.subject)) {
-        setSubject(editingClass.subject);
-        setCustomSubject('');
-      } else {
-        setSubject('أخرى');
-        setCustomSubject(editingClass.subject);
-      }
+      setSubject(editingClass.subject || defaultSubject || 'الرياضيات');
       setRoom(editingClass.room || '');
       setAcademicYear(editingClass.academicYear || defaultAcademicYear);
       setColor(editingClass.color || CLASS_COLORS[0]);
     } else {
-      // Reset form
+      // Reset form with stage awareness and central teacher subject
+      const targetStage = defaultStage || 'secondary';
+      const stageConfig = EDUCATIONAL_STAGES.find((s) => s.id === targetStage) || EDUCATIONAL_STAGES[0];
+      const initialGrade = stageConfig.grades[0];
+
       setName('');
-      setStage('secondary');
-      setGrade(EDUCATIONAL_STAGES[2].grades[0]);
-      setSubject(COMMON_SUBJECTS[0]);
-      setCustomSubject('');
+      setStage(targetStage);
+      setGrade(initialGrade);
+      setSubject(defaultSubject || 'الرياضيات');
       setRoom('');
       setAcademicYear(defaultAcademicYear || '2024 - 2025');
       setColor(CLASS_COLORS[0]);
     }
     setError('');
-  }, [editingClass, isOpen, defaultAcademicYear]);
+  }, [editingClass, isOpen, defaultAcademicYear, defaultStage, defaultSubject]);
 
   // When stage changes, adjust grade to first available grade
   const handleStageChange = (newStage: EducationalStage) => {
@@ -70,16 +76,21 @@ export const AddClassModal: React.FC<AddClassModalProps> = ({
     }
   };
 
+  // When grade changes
+  const handleGradeChange = (newGrade: string) => {
+    setGrade(newGrade);
+  };
+
   if (!isOpen) return null;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!name.trim()) {
-      setError('يرجى إدخال اسم القسم (مثال: 3 علوم تجريبية 1)');
+      setError('يرجى إدخال اسم القسم (مثال: 3 ع ت 1 أو 4 متوسط 2)');
       return;
     }
 
-    const finalSubject = subject === 'أخرى' ? (customSubject.trim() || 'مادة عامة') : subject;
+    const finalSubject = (subject || defaultSubject || 'الرياضيات').trim();
 
     setIsSubmitting(true);
     setError('');
@@ -144,7 +155,7 @@ export const AddClassModal: React.FC<AddClassModalProps> = ({
             <input
               type="text"
               required
-              placeholder="مثال: 3 ع ت 1 أو 4 متوسط 2 أو 5 ابتدائي"
+              placeholder="مثال: 3 ع ت 1 أو 4 متوسط 2 أو 2 تقني رياضي"
               value={name}
               onChange={(e) => setName(e.target.value)}
               className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-hidden focus:ring-2 focus:ring-emerald-500/30 focus:border-emerald-600 text-sm font-medium"
@@ -154,9 +165,9 @@ export const AddClassModal: React.FC<AddClassModalProps> = ({
           {/* Educational Stage (الطور التعليمي) */}
           <div>
             <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
-              الطور التعليمي في الجزائر
+              الطور التعليمي
             </label>
-            <div className="grid grid-cols-3 gap-2">
+            <div className="grid grid-cols-2 gap-2">
               {EDUCATIONAL_STAGES.map((stg) => (
                 <button
                   type="button"
@@ -181,7 +192,7 @@ export const AddClassModal: React.FC<AddClassModalProps> = ({
             </label>
             <select
               value={grade}
-              onChange={(e) => setGrade(e.target.value)}
+              onChange={(e) => handleGradeChange(e.target.value)}
               className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-sm font-medium focus:outline-hidden focus:ring-2 focus:ring-emerald-500/30 focus:border-emerald-600"
             >
               {currentStageConfig.grades.map((grd) => (
@@ -192,55 +203,39 @@ export const AddClassModal: React.FC<AddClassModalProps> = ({
             </select>
           </div>
 
-          {/* Subject (المادة) */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div>
-              <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
-                مادة التدريس
-              </label>
-              <select
-                value={subject}
-                onChange={(e) => setSubject(e.target.value)}
-                className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-sm font-medium focus:outline-hidden focus:ring-2 focus:ring-emerald-500/30 focus:border-emerald-600"
-              >
-                {COMMON_SUBJECTS.map((sub) => (
-                  <option key={sub} value={sub}>
-                    {sub}
-                  </option>
-                ))}
-                <option value="أخرى">مادة أخرى...</option>
-              </select>
+          {/* Centralized Subject Banner (تعتمد تلقائياً من إعدادات الأستاذ المركزية) */}
+          <div className="p-3.5 rounded-xl bg-emerald-50/80 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 flex items-center justify-between">
+            <div className="flex items-center gap-2.5">
+              <div className="w-8 h-8 rounded-lg bg-emerald-600/10 dark:bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 flex items-center justify-center shrink-0">
+                <BookOpen className="w-4 h-4" />
+              </div>
+              <div>
+                <span className="text-[11px] text-slate-500 dark:text-slate-400 block font-medium">
+                  مادة التدريس لهذا القسم:
+                </span>
+                <span className="text-sm font-extrabold text-slate-900 dark:text-white">
+                  {subject || defaultSubject || 'الرياضيات'}
+                </span>
+              </div>
             </div>
-
-            <div>
-              <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
-                الحجرة / القاعة (اختياري)
-              </label>
-              <input
-                type="text"
-                placeholder="مثال: القاعة 12 أو مخبر 2"
-                value={room}
-                onChange={(e) => setRoom(e.target.value)}
-                className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white placeholder:text-slate-400 text-sm font-medium focus:outline-hidden focus:ring-2 focus:ring-emerald-500/30 focus:border-emerald-600"
-              />
-            </div>
+            <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-emerald-100 dark:bg-emerald-900/60 text-emerald-800 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800">
+              تلقائي من إعدادات الأستاذ
+            </span>
           </div>
 
-          {subject === 'أخرى' && (
-            <div>
-              <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
-                اكتب اسم المادة
-              </label>
-              <input
-                type="text"
-                required
-                placeholder="اكتب المادة هنا"
-                value={customSubject}
-                onChange={(e) => setCustomSubject(e.target.value)}
-                className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-sm font-medium focus:outline-hidden focus:ring-2 focus:ring-emerald-500/30 focus:border-emerald-600"
-              />
-            </div>
-          )}
+          {/* Room / الحجرة */}
+          <div>
+            <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
+              الحجرة / القاعة (اختياري)
+            </label>
+            <input
+              type="text"
+              placeholder="مثال: القاعة 12 أو مخبر 2"
+              value={room}
+              onChange={(e) => setRoom(e.target.value)}
+              className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white placeholder:text-slate-400 text-sm font-medium focus:outline-hidden focus:ring-2 focus:ring-emerald-500/30 focus:border-emerald-600"
+            />
+          </div>
 
           {/* Color & Academic Year */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">

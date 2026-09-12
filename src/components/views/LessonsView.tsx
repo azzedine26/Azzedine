@@ -5,6 +5,7 @@ import {
 } from 'lucide-react';
 import { LessonPlan, ClassItem } from '../../types';
 import { LessonDetailModal } from '../modals/LessonDetailModal';
+import { getSubjectsForGradeAndStage } from '../../data/algerianData';
 
 interface LessonsViewProps {
   lessons: LessonPlan[];
@@ -30,17 +31,34 @@ export function LessonsView({
   const [selectedDateFilter, setSelectedDateFilter] = useState('');
   const [detailModalLesson, setDetailModalLesson] = useState<LessonPlan | null>(null);
 
-  // Derive unique subjects from lessons and classes
+  // Derive unique subjects from lessons and classes (with grade-awareness for selected class)
   const availableSubjects = useMemo(() => {
     const set = new Set<string>();
-    classes.forEach((c) => {
-      if (c.subject) set.add(c.subject.trim());
-    });
-    lessons.forEach((l) => {
-      if (l.subject) set.add(l.subject.trim());
-    });
+    
+    if (selectedClassFilter !== 'all') {
+      const matchedClass = classes.find((c) => c.id === selectedClassFilter);
+      if (matchedClass) {
+        const gradeSubjects = getSubjectsForGradeAndStage(matchedClass.stage, matchedClass.grade, [matchedClass.subject]);
+        gradeSubjects.forEach((s) => set.add(s));
+      }
+      lessons
+        .filter((l) => l.classId === selectedClassFilter)
+        .forEach((l) => {
+          if (l.subject) set.add(l.subject.trim());
+        });
+    } else {
+      classes.forEach((c) => {
+        if (c.subject) set.add(c.subject.trim());
+        const gradeSubjects = getSubjectsForGradeAndStage(c.stage, c.grade, [c.subject]);
+        gradeSubjects.forEach((s) => set.add(s));
+      });
+      lessons.forEach((l) => {
+        if (l.subject) set.add(l.subject.trim());
+      });
+    }
+    
     return Array.from(set);
-  }, [classes, lessons]);
+  }, [classes, lessons, selectedClassFilter]);
 
   // Filtered Lessons
   const filteredLessons = useMemo(() => {

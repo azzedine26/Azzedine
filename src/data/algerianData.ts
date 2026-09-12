@@ -32,17 +32,6 @@ export const ALGERIAN_WILAYAS = [
 
 export const EDUCATIONAL_STAGES: { id: EducationalStage; label: string; grades: string[] }[] = [
   {
-    id: 'primary',
-    label: 'التعليم الابتدائي',
-    grades: [
-      'السنة الأولى ابتدائي',
-      'السنة الثانية ابتدائي',
-      'السنة الثالثة ابتدائي',
-      'السنة الرابعة ابتدائي',
-      'السنة الخامسة ابتدائي'
-    ]
-  },
-  {
     id: 'middle',
     label: 'التعليم المتوسط',
     grades: [
@@ -97,6 +86,61 @@ export const COMMON_SUBJECTS = [
   'الاقتصاد والمناجمنت',
   'القانون'
 ];
+
+export const MIDDLE_SUBJECTS_LIST: string[] = [
+  'الرياضيات',
+  'علوم الطبيعة والحياة',
+  'العلوم الفيزيائية والتكنولوجيا',
+  'اللغة العربية وآدابها',
+  'اللغة الفرنسية',
+  'اللغة الإنجليزية',
+  'التاريخ والجغرافيا',
+  'التربية الإسلامية',
+  'التربية المدنية',
+  'الإعلام الآلي',
+  'التربية التشكيلية',
+  'التربية الموسيقية',
+  'التربية البدنية والرياضية',
+  'اللغة الأمازيغية'
+];
+
+export const SECONDARY_SUBJECTS_LIST: string[] = [
+  'علوم الطبيعة والحياة',
+  'الرياضيات',
+  'العلوم الفيزيائية',
+  'اللغة العربية وآدابها',
+  'الفلسفة',
+  'التاريخ والجغرافيا',
+  'العلوم الإسلامية',
+  'اللغة الفرنسية',
+  'اللغة الإنجليزية',
+  'الإعلام الآلي',
+  'الهندسة الميكانيكية',
+  'الهندسة المدنية',
+  'الهندسة الكهربائية',
+  'هندسة الطرائق',
+  'الاقتصاد والمناجمنت',
+  'القانون',
+  'التربية البدنية والرياضية',
+  'اللغة الإيطالية',
+  'اللغة الألمانية',
+  'اللغة الإسبانية',
+  'اللغة الأمازيغية'
+];
+
+export function getSubjectsForGradeAndStage(
+  stage?: EducationalStage | string,
+  grade?: string,
+  fallbackSubjects: string[] = []
+): string[] {
+  if (stage === 'middle') {
+    return MIDDLE_SUBJECTS_LIST;
+  }
+  if (stage === 'secondary') {
+    return SECONDARY_SUBJECTS_LIST;
+  }
+  return fallbackSubjects.length > 0 ? fallbackSubjects : COMMON_SUBJECTS;
+}
 
 export interface CalculationMethodOption {
   id: SubjectCalculationMethodType;
@@ -325,7 +369,7 @@ export const INITIAL_TEACHER_PROFILE: TeacherProfile = {
   fullName: 'أ. عبد القادر بن العربي',
   wilaya: '16 - الجزائر',
   schoolName: 'ثانوية الإخوة حامية',
-  subject: 'علوم الطبيعة والحياة',
+  subject: 'الرياضيات',
   academicYear: '2024 - 2025'
 };
 
@@ -335,7 +379,7 @@ export const INITIAL_CLASSES: ClassItem[] = [
     name: '3 علوم تجريبية 1 (3 ع ت 1)',
     stage: 'secondary',
     grade: '3 ثانوي - علوم تجريبية (بكالوريا BAC)',
-    subject: 'علوم الطبيعة والحياة',
+    subject: 'الرياضيات',
     room: 'المخبر 2',
     academicYear: '2024 - 2025',
     color: '#006233',
@@ -347,7 +391,7 @@ export const INITIAL_CLASSES: ClassItem[] = [
     name: '2 تقني رياضي (2 ت ر)',
     stage: 'secondary',
     grade: '2 ثانوي - تقني رياضي',
-    subject: 'علوم الطبيعة والحياة',
+    subject: 'الرياضيات',
     room: 'القاعة 14',
     academicYear: '2024 - 2025',
     color: '#0284C7',
@@ -359,7 +403,7 @@ export const INITIAL_CLASSES: ClassItem[] = [
     name: '4 متوسط 2 (4 م 2)',
     stage: 'middle',
     grade: 'السنة الرابعة متوسط (شهادة BEM)',
-    subject: 'علوم الطبيعة والحياة',
+    subject: 'الرياضيات',
     room: 'القاعة 05',
     academicYear: '2024 - 2025',
     color: '#D97706',
@@ -478,11 +522,11 @@ export const INITIAL_SESSIONS: ScheduleSession[] = [
     dayOfWeek: 'sunday',
     classId: 'class-demo-1',
     className: '3 علوم تجريبية 1 (3 ع ت 1)',
-    subject: 'علوم الطبيعة والحياة',
+    subject: 'الرياضيات',
     startTime: '08:00',
     endTime: '10:00',
     room: 'المخبر 2',
-    notes: 'حصة أعمال تطبيقية (TP) - تجارب التنفس الخلوي',
+    notes: 'حصة أعمال موجهة - دراسة الدوال العددية وتطبيقاتها',
     color: '#006233',
     createdAt: Date.now() - 86400000 * 5,
     updatedAt: Date.now() - 86400000 * 5
@@ -492,11 +536,11 @@ export const INITIAL_SESSIONS: ScheduleSession[] = [
     dayOfWeek: 'sunday',
     classId: 'class-demo-2',
     className: '2 تقني رياضي (2 ت ر)',
-    subject: 'علوم الطبيعة والحياة',
+    subject: 'الرياضيات',
     startTime: '10:00',
     endTime: '11:00',
     room: 'القاعة 14',
-    notes: 'درس نظري: النقل المشبكي',
+    notes: 'درس نظري: المتتاليات العددية الحسابية والهندسية',
     color: '#0284C7',
     createdAt: Date.now() - 86400000 * 5,
     updatedAt: Date.now() - 86400000 * 5
@@ -506,7 +550,7 @@ export const INITIAL_SESSIONS: ScheduleSession[] = [
     dayOfWeek: 'monday',
     classId: 'class-demo-3',
     className: '4 متوسط 2 (4 م 2)',
-    subject: 'علوم الطبيعة والحياة',
+    subject: 'الرياضيات',
     startTime: '08:00',
     endTime: '09:00',
     room: 'القاعة 05',
@@ -520,7 +564,7 @@ export const INITIAL_SESSIONS: ScheduleSession[] = [
     dayOfWeek: 'monday',
     classId: 'class-demo-1',
     className: '3 علوم تجريبية 1 (3 ع ت 1)',
-    subject: 'علوم الطبيعة والحياة',
+    subject: 'الرياضيات',
     startTime: '13:00',
     endTime: '15:00',
     room: 'المخبر 2',
@@ -534,7 +578,7 @@ export const INITIAL_SESSIONS: ScheduleSession[] = [
     dayOfWeek: 'tuesday',
     classId: 'class-demo-2',
     className: '2 تقني رياضي (2 ت ر)',
-    subject: 'علوم الطبيعة والحياة',
+    subject: 'الرياضيات',
     startTime: '09:00',
     endTime: '11:00',
     room: 'القاعة 14',
@@ -548,11 +592,11 @@ export const INITIAL_SESSIONS: ScheduleSession[] = [
     dayOfWeek: 'wednesday',
     classId: 'class-demo-1',
     className: '3 علوم تجريبية 1 (3 ع ت 1)',
-    subject: 'علوم الطبيعة والحياة',
+    subject: 'الرياضيات',
     startTime: '10:00',
     endTime: '12:00',
     room: 'المخبر 2',
-    notes: 'مراجعة حول التركيب الضوئي',
+    notes: 'مراجعة حول الاشتقاقية وتطبيقاتها',
     color: '#006233',
     createdAt: Date.now() - 86400000 * 2,
     updatedAt: Date.now() - 86400000 * 2
@@ -562,7 +606,7 @@ export const INITIAL_SESSIONS: ScheduleSession[] = [
     dayOfWeek: 'thursday',
     classId: 'class-demo-3',
     className: '4 متوسط 2 (4 م 2)',
-    subject: 'علوم الطبيعة والحياة',
+    subject: 'الرياضيات',
     startTime: '08:00',
     endTime: '10:00',
     room: 'القاعة 05',
@@ -617,76 +661,76 @@ export const DEFAULT_LESSON_STAGES: LessonStage[] = [
 export const INITIAL_LESSONS: LessonPlan[] = [
   {
     id: 'lesson-demo-1',
-    title: 'آليات تركيب البروتين: الاستنساخ والترجمة',
-    subject: 'علوم الطبيعة والحياة',
+    title: 'دراسة الدوال العددية: النهايات والاستمرار والاشتقاق',
+    subject: 'الرياضيات',
     classId: 'class-demo-1',
     className: '3 علوم تجريبية 1 (3 ع ت 1)',
     date: new Date().toISOString().slice(0, 10),
     duration: 'ساعتان (2 سا)',
-    objectives: '1. تحديد مقر تركيب البروتين في الخلية الحقيقية النواة.\n2. إبراز دور الـ ARNm كوسيط بين النواة والهيولى.\n3. تبيان مراحل الاستنساخ ودور إنزيم ARN بوليميراز.',
+    objectives: '1. التمكن من حساب النهايات باستعمال التزايد المقارن.\n2. دراسة تغيرات دالة أسية وتشكيل جدول التغيرات.\n3. تعيين معادلة المماس ورسم المنحنى البياني.',
     stages: [
       {
         id: 'st-1',
-        title: 'وضعية الانطلاق والمشكلة البيداغوجية',
+        title: 'وضعية الانطلاق والتذكير بالمكتسبات',
         duration: '15 دقيقة',
-        content: 'عرض تجربة وضع خلايا بنكرياسية في وسط يحتوي على أحماض أمينية موسومة بنظير مشع. طرح المشكل: كيف يتم التعبير عن المعلومة الوراثية المتواجدة بالنواة لتركيب بروتين في الهيولى؟',
+        content: 'تذكير بخواص النهايات وإجراء تمرين تمهيدي لحساب النهايات المرجعية.',
       },
       {
         id: 'st-2',
-        title: 'النشاط الأول: إثبات وجود الـ ARNm ومقره',
+        title: 'النشاط الأول: دراسة اتجاه التغير وحساب المشتقة',
         duration: '40 دقيقة',
-        content: 'تحليل وثائق التجارب المخبرية والتسجيلات الإشعاعية واستنتاج الخصائص البنيوية للـ ARN مقارنة بالـ ADN.',
+        content: 'حساب المشتقة الأولى لدالة مركبة ودراسة إشارتها وتحديد القيم الحدية.',
       },
       {
         id: 'st-3',
-        title: 'النشاط الثاني: دراسة تفاصيل ظاهرة الاستنساخ',
+        title: 'النشاط الثاني: المناقشة البيانية والمماس',
         duration: '45 دقيقة',
-        content: 'عرض فيديو متحرك عبر Data Show يوضح عمل إنزيم ARN بوليميراز وتتابع القواعد الآزوتية، وتكليف التلاميذ برسم مخطط تحصيلي.',
+        content: 'تعيين نقاط التقاطع مع حاملي المحورين ورسم المنحنى البياني.',
       },
       {
         id: 'st-4',
         title: 'التقويم المرحلي والإدماج',
         duration: '20 دقيقة',
-        content: 'حل تمرين تدريبي مستوحى من بكالوريات سابقة وتدوين الحصيلة المعرفية في كراس الدروس.',
+        content: 'حل مسألة إدماجية نموذجية وتدوين النتيجة في كراس الدروس.',
       },
     ],
-    teachingAids: 'الكتاب المدرسي، جهاز العرض الرقمي (Data Show)، وثائق تجريبية مصورة، السبورة.',
-    teacherNotes: 'تفاعل التلاميذ كان ممتازاً في تحليل المنحنيات البيانية. يجب التركيز في الحصة القادمة على مقارنة إنزيم ARN بوليميراز ومراحل إنهاء الاستنساخ.',
+    teachingAids: 'الكتاب المدرسي، جهاز العرض الرقمي (Data Show)، حاسبة بيانية، السبورة.',
+    teacherNotes: 'تفاعل التلاميذ كان ممتازاً في إزالة حالات عدم التعيين.',
     color: '#006233',
     createdAt: Date.now() - 86400000 * 2,
     updatedAt: Date.now() - 86400000 * 2,
   },
   {
     id: 'lesson-demo-2',
-    title: 'الاتصال العصبي: الحركة الإرادية والفعل المنعكس',
-    subject: 'علوم الطبيعة والحياة',
+    title: 'الحساب الحرفي والنشر والتحليل',
+    subject: 'الرياضيات',
     classId: 'class-demo-3',
     className: '4 متوسط 2 (4 م 2)',
     date: new Date(Date.now() - 86400000).toISOString().slice(0, 10),
     duration: 'ساعة واحدة (1 سا)',
-    objectives: '1. التمييز بين الحركة الإرادية واللاإرادية (المنعكس الفطري).\n2. تحديد الأعضاء الفاعلة في مسار الرسالة العصبية.\n3. إنجاز رسم تخطيطي لقوس الانعكاس الشوكي.',
+    objectives: '1. توظيف المتطابقات الشهيرة في النشر والتبسيط.\n2. تحليل عبارة جبرية إلى جداء عاملين من الدرجة الأولى.\n3. حل معادلة جداء معدوم.',
     stages: [
       {
         id: 'st-201',
-        title: 'الوضعية المشكلة',
+        title: 'الوضعية المشكلة والتمهيد',
         duration: '10 دقائق',
-        content: 'استحضار موقف سحب اليد بسرعة عند لمس جسم ساخن مقارنة بقرار كتابة رسالة. ما هو الفرق بين السلوكين وما المسار العصبي لكل منهما؟',
+        content: 'حساب مساحة مستطيل أبعاده بدلالة x بطريقتين وملاحظة التطابق بين العبارتين.',
       },
       {
         id: 'st-202',
-        title: 'البحث والتقصي المخبري',
+        title: 'بناء التعلمات والتطبيق الموجه',
         duration: '35 دقيقة',
-        content: 'ملاحظة مجسم الدماغ والنخاع الشوكي، وتتبع مسار السيالة العصبية من المستقبل الحسي، العصب الحسي، النخاع الشوكي، العصب الحركي، إلى العضلة.',
+        content: 'تطبيق المتطابقات الشهيرة في التحليل وتدريب التلاميذ على استخراج العامل المشترك.',
       },
       {
         id: 'st-203',
-        title: 'الإدماج والتقويم',
+        title: 'الإدماج والتقويم الفردي',
         duration: '15 دقيقة',
-        content: 'رسم تخطيطي وظيفي لقوس الانعكاس وتحديد دور المركز العصبي (النخاع الشوكي).',
+        content: 'حل تمرين تدريبي فردي على الألواح وتصحيحه جماعياً على السبورة.',
       },
     ],
-    teachingAids: 'مجسم النخاع الشوكي والدماغ، الكتاب المدرسي ص 64، بطاقات توضيحية ملونة.',
-    teacherNotes: 'ضرورة مراجعة مفهوم السيالة العصبية الحسية والحركية مع التلاميذ الذين وجدوا صعوبة في تحديد الاتجاه.',
+    teachingAids: 'الكتاب المدرسي ص 14، بطاقات القوانين، السبورة.',
+    teacherNotes: 'ضرورة تثبيت قاعدة إشارة السالب قبل القوس عند التحليل مع بعض التلاميذ.',
     color: '#D97706',
     createdAt: Date.now() - 86400000 * 4,
     updatedAt: Date.now() - 86400000 * 4,
@@ -700,12 +744,12 @@ export const INITIAL_ASSESSMENTS: AssessmentItem[] = [
     type: 'continuous',
     classId: 'class-demo-1',
     className: '3 علوم تجريبية 1 (3 ع ت 1)',
-    subject: 'علوم الطبيعة والحياة',
+    subject: 'الرياضيات',
     trimester: 'T1',
     date: '2024-10-15',
     coefficient: 1,
     maxScore: 20,
-    notes: 'تقييم شامل للانضباط، حل الواجبات المنزلية، والمشاركة الصفية في المخبر.',
+    notes: 'تقييم شامل للانضباط، حل الواجبات المنزلية، والمشاركة الصفية الفعالة.',
     grades: {
       'student-demo-1': { score: 17.5, isAbsent: false, note: 'مشاركة ممتازة والتزام بالواجبات' },
       'student-demo-2': { score: 19.0, isAbsent: false, note: 'مسؤولة ومنضبطة جداً' },
@@ -720,15 +764,15 @@ export const INITIAL_ASSESSMENTS: AssessmentItem[] = [
     type: 'test',
     classId: 'class-demo-1',
     className: '3 علوم تجريبية 1 (3 ع ت 1)',
-    subject: 'علوم الطبيعة والحياة',
+    subject: 'الرياضيات',
     trimester: 'T1',
     date: '2024-11-05',
     coefficient: 1,
     maxScore: 20,
-    notes: 'حول الوحدة الأولى: تركيب البروتين (الاستنساخ والترجمة).',
+    notes: 'حول الوحدة الأولى: الدوال العددية والنهايات.',
     grades: {
       'student-demo-1': { score: 16.5, isAbsent: false, note: 'إجابة منهجية ممتازة في التمرين الأول' },
-      'student-demo-2': { score: 18.0, isAbsent: false, note: 'علامة كاملة في الاستدلال العلمي' },
+      'student-demo-2': { score: 18.0, isAbsent: false, note: 'علامة كاملة في دراسة التغيرات' },
       'student-demo-3': { score: 11.5, isAbsent: false, note: 'نقص في الربط بين المعطيات' },
     },
     createdAt: Date.now() - 86400000 * 12,
@@ -740,16 +784,16 @@ export const INITIAL_ASSESSMENTS: AssessmentItem[] = [
     type: 'exam',
     classId: 'class-demo-1',
     className: '3 علوم تجريبية 1 (3 ع ت 1)',
-    subject: 'علوم الطبيعة والحياة',
+    subject: 'الرياضيات',
     trimester: 'T1',
     date: '2024-12-03',
     coefficient: 2,
     maxScore: 20,
-    notes: 'مواضيع مطابقة لمنهجية البكالوريا (استرجاع معارف، استدلال علمي، مسعى علمي).',
+    notes: 'مواضيع مطابقة لمنهجية البكالوريا الرسمية.',
     grades: {
-      'student-demo-1': { score: 16.0, isAbsent: false, note: 'استدلال علمي دقيق في تمرين المسعى' },
+      'student-demo-1': { score: 16.0, isAbsent: false, note: 'حل دقيق لمسألة الدوال' },
       'student-demo-2': { score: 18.5, isAbsent: false, note: 'أعلى علامة في القسم' },
-      'student-demo-3': { score: 12.0, isAbsent: false, note: 'تحسن في صياغة الفرضيات' },
+      'student-demo-3': { score: 12.0, isAbsent: false, note: 'تحسن في حساب المشتقات' },
     },
     createdAt: Date.now() - 86400000 * 5,
     updatedAt: Date.now() - 86400000 * 5,
@@ -760,12 +804,12 @@ export const INITIAL_ASSESSMENTS: AssessmentItem[] = [
     type: 'test',
     classId: 'class-demo-2',
     className: '2 تقني رياضي (2 ت ر)',
-    subject: 'علوم الطبيعة والحياة',
+    subject: 'الرياضيات',
     trimester: 'T1',
     date: '2024-11-08',
     coefficient: 1,
     maxScore: 20,
-    notes: 'آليات التنظيم الهرموني العصبي.',
+    notes: 'المتتاليات العددية.',
     grades: {
       'student-demo-4': { score: 15.0, isAbsent: false, note: 'عمل منظم' },
       'student-demo-5': { score: 14.5, isAbsent: false, note: 'مستوى جيد' },
@@ -779,12 +823,12 @@ export const INITIAL_ASSESSMENTS: AssessmentItem[] = [
     type: 'activity',
     classId: 'class-demo-3',
     className: '4 متوسط 2 (4 م 2)',
-    subject: 'علوم الطبيعة والحياة',
+    subject: 'الرياضيات',
     trimester: 'T1',
     date: '2024-10-22',
     coefficient: 1,
     maxScore: 20,
-    notes: 'إنجاز بحث ومجسم حول الجهاز الهضمي والامتصاص المعوي.',
+    notes: 'إنجاز بحث ومجسم هندسي حول مبرهنة طاليس.',
     grades: {
       'student-demo-6': { score: 17.0, isAbsent: false, note: 'مجسم رائع وعرض شفهي مميز' },
     },

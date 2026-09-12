@@ -1,8 +1,11 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { X, Award, Calendar, Layers, BookOpen, Clock, FileText, Check } from 'lucide-react';
 import { AssessmentItem, AssessmentType, ClassItem, Trimester } from '../../types';
 import { ASSESSMENT_TYPE_INFO, TRIMESTER_INFO } from '../../utils/gradeCalculations';
-import { COMMON_SUBJECTS } from '../../data/algerianData';
+import { 
+  COMMON_SUBJECTS, 
+  getSubjectsForGradeAndStage
+} from '../../data/algerianData';
 
 interface AddAssessmentModalProps {
   isOpen: boolean;
@@ -10,6 +13,7 @@ interface AddAssessmentModalProps {
   onSave: (assessment: AssessmentItem, andOpenGrading?: boolean) => Promise<void>;
   classes: ClassItem[];
   defaultClassId?: string;
+  defaultSubject?: string;
   editingAssessment?: AssessmentItem | null;
 }
 
@@ -19,18 +23,23 @@ export const AddAssessmentModal: React.FC<AddAssessmentModalProps> = ({
   onSave,
   classes,
   defaultClassId,
+  defaultSubject = 'الرياضيات',
   editingAssessment,
 }) => {
   const [classId, setClassId] = useState<string>('');
   const [type, setType] = useState<AssessmentType>('test');
   const [trimester, setTrimester] = useState<Trimester>('T1');
   const [title, setTitle] = useState<string>('');
-  const [subject, setSubject] = useState<string>('');
+  const [subject, setSubject] = useState<string>(defaultSubject || 'الرياضيات');
   const [date, setDate] = useState<string>(new Date().toISOString().slice(0, 10));
   const [coefficient, setCoefficient] = useState<number>(1);
   const [maxScore, setMaxScore] = useState<number>(20);
   const [notes, setNotes] = useState<string>('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const selectedClass = useMemo(() => {
+    return classes.find((c) => c.id === classId) || null;
+  }, [classes, classId]);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -40,15 +49,15 @@ export const AddAssessmentModal: React.FC<AddAssessmentModalProps> = ({
       setType(editingAssessment.type);
       setTrimester(editingAssessment.trimester || 'T1');
       setTitle(editingAssessment.title);
-      setSubject(editingAssessment.subject);
+      setSubject(editingAssessment.subject || defaultSubject || 'الرياضيات');
       setDate(editingAssessment.date);
       setCoefficient(editingAssessment.coefficient || 1);
       setMaxScore(editingAssessment.maxScore || 20);
       setNotes(editingAssessment.notes || '');
     } else {
-      const selectedClass = classes.find((c) => c.id === defaultClassId) || classes[0];
-      const initialClassId = selectedClass ? selectedClass.id : '';
-      const initialSubject = selectedClass ? selectedClass.subject : COMMON_SUBJECTS[0];
+      const foundClass = classes.find((c) => c.id === defaultClassId) || classes[0];
+      const initialClassId = foundClass ? foundClass.id : '';
+      const initialSubject = foundClass?.subject || defaultSubject || 'الرياضيات';
 
       setClassId(initialClassId);
       setType('test');
@@ -60,7 +69,7 @@ export const AddAssessmentModal: React.FC<AddAssessmentModalProps> = ({
       setMaxScore(20);
       setNotes('');
     }
-  }, [isOpen, editingAssessment, defaultClassId, classes]);
+  }, [isOpen, editingAssessment, defaultClassId, classes, defaultSubject]);
 
   const handleTypeChange = (newType: AssessmentType) => {
     setType(newType);
@@ -103,7 +112,10 @@ export const AddAssessmentModal: React.FC<AddAssessmentModalProps> = ({
     setClassId(newClassId);
     const found = classes.find((c) => c.id === newClassId);
     if (found && !editingAssessment) {
-      setSubject(found.subject);
+      const validSubjects = getSubjectsForGradeAndStage(found.stage, found.grade, [found.subject]);
+      if (!subject || !validSubjects.includes(subject)) {
+        setSubject(found.subject && validSubjects.includes(found.subject) ? found.subject : validSubjects[0] || found.subject || '');
+      }
     }
   };
 
@@ -125,14 +137,14 @@ export const AddAssessmentModal: React.FC<AddAssessmentModalProps> = ({
       return;
     }
 
-    const selectedClass = classes.find((c) => c.id === classId);
+    const selectedClassObj = classes.find((c) => c.id === classId);
 
     const assessmentItem: AssessmentItem = {
       id: editingAssessment ? editingAssessment.id : `assess-${Date.now()}`,
       title: title.trim(),
       type,
       classId,
-      className: selectedClass?.name || '',
+      className: selectedClassObj?.name || '',
       subject: subject.trim(),
       trimester,
       date,
@@ -212,24 +224,17 @@ export const AddAssessmentModal: React.FC<AddAssessmentModalProps> = ({
             </div>
 
             <div>
-              <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-                المادة التعليمية <span className="text-rose-500">*</span>
+              <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1 flex items-center gap-1.5">
+                <BookOpen className="w-3.5 h-3.5 text-emerald-600" />
+                <span>المادة</span>
               </label>
-              <div className="relative">
-                <input
-                  type="text"
-                  list="subjects-list"
-                  value={subject}
-                  onChange={(e) => setSubject(e.target.value)}
-                  placeholder="مثال: علوم الطبيعة والحياة"
-                  className="w-full h-10 px-3 pl-8 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-xs sm:text-sm font-medium focus:ring-2 focus:ring-emerald-500 focus:outline-hidden"
-                />
-                <BookOpen className="w-4 h-4 text-slate-400 absolute left-3 top-3 pointer-events-none" />
-                <datalist id="subjects-list">
-                  {COMMON_SUBJECTS.map((s) => (
-                    <option key={s} value={s} />
-                  ))}
-                </datalist>
+              <div className="h-10 px-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/80 dark:bg-slate-800/80 flex items-center justify-between">
+                <span className="text-xs sm:text-sm font-extrabold text-slate-900 dark:text-white">
+                  {subject || defaultSubject || 'الرياضيات'}
+                </span>
+                <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300">
+                  تلقائي
+                </span>
               </div>
             </div>
           </div>
@@ -310,7 +315,7 @@ export const AddAssessmentModal: React.FC<AddAssessmentModalProps> = ({
             />
           </div>
 
-          {/* 5. Date & Max Score (العدد الأقصى للتقييم - لا توجد معاملات للتقييمات، المعامل واحد للمادة) */}
+          {/* 5. Date & Max Score */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <div className="flex items-center justify-between mb-1">

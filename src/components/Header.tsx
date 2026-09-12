@@ -75,7 +75,9 @@ export const Header: React.FC<HeaderProps> = ({
                 </span>
               </div>
               <p className="text-[11px] text-slate-500 dark:text-slate-400 hidden sm:block">
-                {profile.fullName ? `${profile.fullName} • ` : ''}{profile.schoolName || 'المنظومة التربوية الجزائرية'}
+                {profile.fullName ? `${profile.fullName} • ` : ''}
+                {profile.stage === 'primary' ? 'ابتدائي • ' : profile.stage === 'middle' ? 'متوسط • ' : profile.stage === 'secondary' ? 'ثانوي • ' : ''}
+                {profile.schoolName || 'المنظومة التربوية الجزائرية'}
               </p>
             </div>
           </div>

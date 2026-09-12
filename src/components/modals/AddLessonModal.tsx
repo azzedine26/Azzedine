@@ -1,7 +1,12 @@
-import React, { useState, useEffect } from 'react';
-import { X, Plus, Trash2, BookOpen, Clock, Calendar, CheckCircle, Sparkles, HelpCircle } from 'lucide-react';
+import React, { useState, useEffect, useMemo } from 'react';
+import { X, Plus, Trash2, BookOpen, Clock, Calendar, CheckCircle, Sparkles, HelpCircle, GraduationCap } from 'lucide-react';
 import { ClassItem, LessonPlan, LessonStage } from '../../types';
-import { COMMON_DURATIONS, COMMON_TEACHING_AIDS, DEFAULT_LESSON_STAGES } from '../../data/algerianData';
+import { 
+  COMMON_DURATIONS, 
+  COMMON_TEACHING_AIDS, 
+  DEFAULT_LESSON_STAGES,
+  getSubjectsForGradeAndStage
+} from '../../data/algerianData';
 
 interface AddLessonModalProps {
   isOpen: boolean;
@@ -9,6 +14,7 @@ interface AddLessonModalProps {
   onSave: (lessonData: LessonPlan | Omit<LessonPlan, 'createdAt' | 'updatedAt'>) => void;
   classes: ClassItem[];
   defaultClassId?: string;
+  defaultSubject?: string;
   editingLesson?: LessonPlan | null;
 }
 
@@ -18,11 +24,12 @@ export function AddLessonModal({
   onSave,
   classes,
   defaultClassId,
+  defaultSubject = 'الرياضيات',
   editingLesson,
 }: AddLessonModalProps) {
   const [title, setTitle] = useState('');
   const [classId, setClassId] = useState('');
-  const [subject, setSubject] = useState('');
+  const [subject, setSubject] = useState(defaultSubject || 'الرياضيات');
   const [date, setDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [duration, setDuration] = useState('ساعة واحدة (1 سا)');
   const [objectives, setObjectives] = useState('');
@@ -31,6 +38,20 @@ export function AddLessonModal({
   const [color, setColor] = useState('#006233');
   const [stages, setStages] = useState<LessonStage[]>([]);
   const [errors, setErrors] = useState<Record<string, string>>({});
+
+  const selectedClass = useMemo(() => {
+    return classes.find((c) => c.id === classId) || null;
+  }, [classes, classId]);
+
+  const notesTextareaRef = React.useRef<HTMLTextAreaElement>(null);
+
+  // Auto-resize teacher notes textarea to match content
+  useEffect(() => {
+    if (notesTextareaRef.current) {
+      notesTextareaRef.current.style.height = 'auto';
+      notesTextareaRef.current.style.height = `${Math.max(88, notesTextareaRef.current.scrollHeight)}px`;
+    }
+  }, [teacherNotes, isOpen]);
 
   const colorOptions = [
     { label: 'أخضر جزائري', value: '#006233' },
@@ -45,7 +66,7 @@ export function AddLessonModal({
     if (editingLesson) {
       setTitle(editingLesson.title);
       setClassId(editingLesson.classId);
-      setSubject(editingLesson.subject);
+      setSubject(editingLesson.subject || defaultSubject || 'الرياضيات');
       setDate(editingLesson.date);
       setDuration(editingLesson.duration || 'ساعة واحدة (1 سا)');
       setObjectives(editingLesson.objectives || '');
@@ -62,7 +83,7 @@ export function AddLessonModal({
       
       setTitle('');
       setClassId(initialClassId);
-      setSubject(initialClass ? initialClass.subject : '');
+      setSubject(initialClass?.subject || defaultSubject || 'الرياضيات');
       setDate(new Date().toISOString().slice(0, 10));
       setDuration('ساعة واحدة (1 سا)');
       setObjectives('');
@@ -72,17 +93,19 @@ export function AddLessonModal({
       setStages(JSON.parse(JSON.stringify(DEFAULT_LESSON_STAGES)));
     }
     setErrors({});
-  }, [editingLesson, defaultClassId, classes, isOpen]);
+  }, [editingLesson, defaultClassId, classes, isOpen, defaultSubject]);
 
   if (!isOpen) return null;
 
   // When class changes, auto-update subject and color if not custom
   const handleClassChange = (newClassId: string) => {
     setClassId(newClassId);
-    const selectedClass = classes.find((c) => c.id === newClassId);
-    if (selectedClass) {
-      setSubject(selectedClass.subject);
-      setColor(selectedClass.color || '#006233');
+    const targetClass = classes.find((c) => c.id === newClassId);
+    if (targetClass) {
+      if (!editingLesson) {
+        setSubject(targetClass.subject || defaultSubject || 'الرياضيات');
+      }
+      setColor(targetClass.color || '#006233');
     }
   };
 
@@ -113,7 +136,6 @@ export function AddLessonModal({
   // Toggle quick teaching aids
   const handleToggleAid = (aid: string) => {
     if (teachingAids.includes(aid)) {
-      // Remove it
       const updated = teachingAids
         .split('،')
         .map((s) => s.trim())
@@ -121,7 +143,6 @@ export function AddLessonModal({
         .join('، ');
       setTeachingAids(updated);
     } else {
-      // Add it
       const current = teachingAids.trim();
       if (!current) {
         setTeachingAids(aid);
@@ -156,12 +177,12 @@ export function AddLessonModal({
       return;
     }
 
-    const selectedClass = classes.find((c) => c.id === classId);
+    const selectedClassObj = classes.find((c) => c.id === classId);
     const lessonData: LessonPlan = {
       id: editingLesson ? editingLesson.id : `lesson-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
       title: title.trim(),
       classId,
-      className: selectedClass ? selectedClass.name : undefined,
+      className: selectedClassObj ? selectedClassObj.name : undefined,
       subject: subject.trim(),
       date,
       duration: duration.trim(),
@@ -184,13 +205,13 @@ export function AddLessonModal({
   };
 
   return (
-    <div className="fixed inset-0 z-[100] overflow-y-auto bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4">
+    <div className="fixed inset-0 z-[100] overflow-y-auto overscroll-contain bg-slate-900/60 backdrop-blur-xs flex justify-center items-start p-2 sm:p-4 sm:py-8 min-h-screen">
       <div 
-        className="bg-white dark:bg-slate-900 rounded-2xl w-full max-w-3xl border border-slate-200 dark:border-slate-800 shadow-2xl overflow-hidden flex flex-col max-h-[92vh] animate-in fade-in zoom-in-95 duration-200 text-right"
+        className="bg-white dark:bg-slate-900 rounded-2xl w-full max-w-3xl border border-slate-200 dark:border-slate-800 shadow-2xl my-2 sm:my-4 animate-in fade-in zoom-in-95 duration-200 text-right"
         dir="rtl"
       >
         {/* Header */}
-        <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-800/40">
+        <div className="flex items-center justify-between px-5 py-3.5 sm:py-4 border-b border-slate-100 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-800/40 rounded-t-2xl shrink-0">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-xl bg-emerald-100 dark:bg-emerald-950/80 text-emerald-700 dark:text-emerald-400 flex items-center justify-center shrink-0">
               <BookOpen className="w-5 h-5" />
@@ -214,7 +235,7 @@ export function AddLessonModal({
         </div>
 
         {/* Form Body */}
-        <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto p-5 sm:p-6 space-y-6">
+        <form onSubmit={handleSubmit} className="p-4 sm:p-6 space-y-6">
           {/* Row 1: Lesson Title */}
           <div>
             <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
@@ -225,7 +246,7 @@ export function AddLessonModal({
               value={title}
               onChange={(e) => setTitle(e.target.value)}
               placeholder="مثال: آليات تركيب البروتين، الثورة التحريرية الجزائرية، الحساب الشعاعي..."
-              className={`w-full px-3.5 py-2.5 rounded-xl border text-sm font-medium bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500 transition ${
+              className={`w-full px-3.5 py-2.5 rounded-xl border text-sm font-medium bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-hidden focus:ring-2 focus:ring-emerald-500 transition ${
                 errors.title ? 'border-rose-500 bg-rose-50/20' : 'border-slate-200 dark:border-slate-700'
               }`}
             />
@@ -246,7 +267,7 @@ export function AddLessonModal({
                 <select
                   value={classId}
                   onChange={(e) => handleClassChange(e.target.value)}
-                  className={`w-full px-3.5 py-2.5 rounded-xl border text-sm font-medium bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500 transition ${
+                  className={`w-full px-3.5 py-2.5 rounded-xl border text-sm font-medium bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-hidden focus:ring-2 focus:ring-emerald-500 transition ${
                     errors.classId ? 'border-rose-500' : 'border-slate-200 dark:border-slate-700'
                   }`}
                 >
@@ -262,19 +283,18 @@ export function AddLessonModal({
             </div>
 
             <div>
-              <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
-                المادة التعليمية <span className="text-rose-500">*</span>
+              <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5 flex items-center gap-1.5">
+                <BookOpen className="w-3.5 h-3.5 text-emerald-600" />
+                <span>المادة المقررة</span>
               </label>
-              <input
-                type="text"
-                value={subject}
-                onChange={(e) => setSubject(e.target.value)}
-                placeholder="مثال: علوم الطبيعة والحياة، الرياضيات، التاريخ..."
-                className={`w-full px-3.5 py-2.5 rounded-xl border text-sm font-medium bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500 transition ${
-                  errors.subject ? 'border-rose-500' : 'border-slate-200 dark:border-slate-700'
-                }`}
-              />
-              {errors.subject && <p className="text-xs text-rose-600 mt-1 font-semibold">{errors.subject}</p>}
+              <div className="h-10 px-3.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/80 dark:bg-slate-800/80 flex items-center justify-between">
+                <span className="text-sm font-extrabold text-slate-900 dark:text-white">
+                  {subject || defaultSubject || 'الرياضيات'}
+                </span>
+                <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300">
+                  تلقائي
+                </span>
+              </div>
             </div>
           </div>
 
@@ -289,7 +309,7 @@ export function AddLessonModal({
                   type="date"
                   value={date}
                   onChange={(e) => setDate(e.target.value)}
-                  className={`w-full px-3.5 py-2.5 rounded-xl border text-sm font-medium bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500 transition ${
+                  className={`w-full px-3.5 py-2.5 rounded-xl border text-sm font-medium bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-hidden focus:ring-2 focus:ring-emerald-500 transition ${
                     errors.date ? 'border-rose-500' : 'border-slate-200 dark:border-slate-700'
                   }`}
                 />
@@ -306,7 +326,7 @@ export function AddLessonModal({
                 value={duration}
                 onChange={(e) => setDuration(e.target.value)}
                 placeholder="مثال: ساعة واحدة (1 سا) أو ساعتان..."
-                className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 text-sm font-medium bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500 transition"
+                className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 text-sm font-medium bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-hidden focus:ring-2 focus:ring-emerald-500 transition"
               />
               <div className="flex flex-wrap gap-1.5 mt-2">
                 {COMMON_DURATIONS.map((dur) => (
@@ -340,7 +360,7 @@ export function AddLessonModal({
               value={objectives}
               onChange={(e) => setObjectives(e.target.value)}
               placeholder="مثال:&#10;1. التعرف على مفهوم الاستنساخ ومقره في الخلية.&#10;2. استنتاج دور إنزيم ARN بوليميراز.&#10;3. إنجاز مخطط تفسيري لآلية التعبير المورثي."
-              className={`w-full px-3.5 py-2.5 rounded-xl border text-sm font-medium bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500 transition leading-relaxed ${
+              className={`w-full px-3.5 py-2.5 rounded-xl border text-sm font-medium bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-hidden focus:ring-2 focus:ring-emerald-500 transition leading-relaxed ${
                 errors.objectives ? 'border-rose-500 bg-rose-50/20' : 'border-slate-200 dark:border-slate-700'
               }`}
             />
@@ -387,7 +407,7 @@ export function AddLessonModal({
                         value={stage.title}
                         onChange={(e) => handleUpdateStage(index, 'title', e.target.value)}
                         placeholder="عنوان المرحلة (مثال: وضعية الانطلاق)"
-                        className="flex-1 px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 text-xs font-bold bg-white dark:bg-slate-900 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                        className="flex-1 px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 text-xs font-bold bg-white dark:bg-slate-900 text-slate-900 dark:text-white focus:outline-hidden focus:ring-2 focus:ring-emerald-500"
                       />
                     </div>
                     <div className="flex items-center gap-2">
@@ -396,7 +416,7 @@ export function AddLessonModal({
                         value={stage.duration || ''}
                         onChange={(e) => handleUpdateStage(index, 'duration', e.target.value)}
                         placeholder="المدة (مثال: 15 د)"
-                        className="w-24 px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 text-xs font-medium bg-white dark:bg-slate-900 text-slate-900 dark:text-white text-center focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                        className="w-24 px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 text-xs font-medium bg-white dark:bg-slate-900 text-slate-900 dark:text-white text-center focus:outline-hidden focus:ring-2 focus:ring-emerald-500"
                       />
                       <button
                         type="button"
@@ -415,7 +435,7 @@ export function AddLessonModal({
                     value={stage.content}
                     onChange={(e) => handleUpdateStage(index, 'content', e.target.value)}
                     placeholder="محتوى المرحلة: نشاط الأستاذ، نشاط المتعلم، التعليمات والسندات المستغلة..."
-                    className="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 text-xs font-medium bg-white dark:bg-slate-900 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500 leading-relaxed"
+                    className="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 text-xs font-medium bg-white dark:bg-slate-900 text-slate-900 dark:text-white focus:outline-hidden focus:ring-2 focus:ring-emerald-500 leading-relaxed"
                   />
                 </div>
               ))}
@@ -432,7 +452,7 @@ export function AddLessonModal({
               value={teachingAids}
               onChange={(e) => setTeachingAids(e.target.value)}
               placeholder="مثال: الكتاب المدرسي، جهاز العرض، بطاقات تعليمية، مخبر..."
-              className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 text-sm font-medium bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500 transition"
+              className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 text-sm font-medium bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-hidden focus:ring-2 focus:ring-emerald-500 transition"
             />
             {/* Quick chips */}
             <div className="mt-2.5">
@@ -461,21 +481,27 @@ export function AddLessonModal({
           </div>
 
           {/* Row 7: Teacher Notes */}
-          <div className="pt-2 border-t border-slate-100 dark:border-slate-800">
-            <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
+          <div className="pt-2 border-t border-slate-100 dark:border-slate-800 space-y-1.5">
+            <label className="block text-xs font-bold text-slate-700 dark:text-slate-300">
               ملاحظات الأستاذ وتوجيهات الحصة (اختياري)
             </label>
             <textarea
-              rows={2}
+              ref={notesTextareaRef}
+              rows={3}
               value={teacherNotes}
-              onChange={(e) => setTeacherNotes(e.target.value)}
+              onChange={(e) => {
+                setTeacherNotes(e.target.value);
+                e.target.style.height = 'auto';
+                e.target.style.height = `${Math.max(88, e.target.scrollHeight)}px`;
+              }}
               placeholder="مثال: صعوبات لوحظت لدى التلاميذ، توجيهات للحصة القادمة، أسئلة إضافية مقترحة..."
-              className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 text-sm font-medium bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500 transition leading-relaxed"
+              className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 text-sm font-medium bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-hidden focus:ring-2 focus:ring-emerald-500 transition leading-relaxed min-h-[88px] resize-y overflow-visible"
+              style={{ minHeight: '88px' }}
             />
           </div>
 
           {/* Row 8: Color Tagging */}
-          <div>
+          <div className="pb-2">
             <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-2">
               لون تمييز بطاقة الدرس
             </label>
@@ -499,7 +525,7 @@ export function AddLessonModal({
         </form>
 
         {/* Modal Footer */}
-        <div className="flex items-center justify-end gap-3 px-5 py-4 border-t border-slate-100 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-800/40">
+        <div className="flex items-center justify-end gap-3 px-5 py-4 border-t border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-900 rounded-b-2xl">
           <button
             type="button"
             onClick={onClose}

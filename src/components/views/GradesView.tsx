@@ -44,6 +44,7 @@ import {
   SubjectCalculationDetailResult 
 } from '../../utils/gradeCalculations';
 import { StudentSubjectBreakdownModal } from '../modals/StudentSubjectBreakdownModal';
+import { getSubjectsForGradeAndStage } from '../../data/algerianData';
 
 interface GradesViewProps {
   assessments: AssessmentItem[];
@@ -116,17 +117,27 @@ export const GradesView: React.FC<GradesViewProps> = ({
   // Available subjects for selected class
   const availableSubjects = useMemo(() => {
     const set = new Set<string>();
+    if (activeClass) {
+      if (activeClass.subject?.trim()) set.add(activeClass.subject.trim());
+      if (profile.subject?.trim()) set.add(profile.subject.trim());
+      const gradeSubs = getSubjectsForGradeAndStage(activeClass.stage, activeClass.grade, [activeClass.subject]);
+      gradeSubs.forEach((s) => set.add(s));
+      subjectSettings.forEach((s) => {
+        if (s.name?.trim()) set.add(s.name.trim());
+      });
+    } else {
+      subjectSettings.forEach((s) => {
+        if (s.name?.trim()) set.add(s.name.trim());
+      });
+      if (profile.subject?.trim()) {
+        set.add(profile.subject.trim());
+      }
+    }
     classAssessments.forEach((a) => {
       if (a.subject?.trim()) set.add(a.subject.trim());
     });
-    subjectSettings.forEach((s) => {
-      if (s.name?.trim()) set.add(s.name.trim());
-    });
-    if (profile.subject?.trim()) {
-      set.add(profile.subject.trim());
-    }
     return Array.from(set);
-  }, [classAssessments, subjectSettings, profile.subject]);
+  }, [activeClass, classAssessments, subjectSettings, profile.subject]);
 
   // Active Subject Name
   const activeSubjectName = useMemo(() => {

@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { 
   Settings, 
   Moon, 
@@ -14,10 +14,21 @@ import {
   School,
   MapPin,
   BookOpen,
-  Info
+  Info,
+  GraduationCap,
+  Check,
+  Plus,
+  Layers,
+  Sparkles,
+  SlidersHorizontal
 } from 'lucide-react';
-import { AppSettings, TeacherProfile, ThemeMode, SubjectSetting } from '../../types';
-import { ALGERIAN_WILAYAS, COMMON_SUBJECTS } from '../../data/algerianData';
+import { AppSettings, TeacherProfile, ThemeMode, SubjectSetting, EducationalStage } from '../../types';
+import { 
+  ALGERIAN_WILAYAS, 
+  COMMON_SUBJECTS,
+  MIDDLE_SUBJECTS_LIST,
+  SECONDARY_SUBJECTS_LIST
+} from '../../data/algerianData';
 import { usePWAInstall } from '../../hooks/usePWAInstall';
 import { SubjectSettingsSection } from '../settings/SubjectSettingsSection';
 
@@ -26,6 +37,8 @@ interface SettingsViewProps {
   theme: ThemeMode;
   onThemeChange: (theme: ThemeMode) => void;
   onSaveProfile: (profile: TeacherProfile) => Promise<void>;
+  onSaveStage?: (stage: EducationalStage, specializedSubject: string) => Promise<void>;
+  onOpenStageWizard?: () => void;
   onExportBackup: () => Promise<void>;
   onImportBackup: (jsonString: string) => Promise<{ classesCount: number; studentsCount: number }>;
   onResetToSampleData: () => Promise<void>;
@@ -42,6 +55,8 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   theme,
   onThemeChange,
   onSaveProfile,
+  onSaveStage,
+  onOpenStageWizard,
   onExportBackup,
   onImportBackup,
   onResetToSampleData,
@@ -54,6 +69,13 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
 }) => {
   const { isInstallable, install, isIOS, isInstalled } = usePWAInstall();
 
+  // Stage & Subject State
+  const [stage, setStage] = useState<EducationalStage>(settings.educationalStage || 'secondary');
+  const [specializedSubject, setSpecializedSubject] = useState<string>(settings.profile.subject || COMMON_SUBJECTS[0]);
+  const [customSpecializedInput, setCustomSpecializedInput] = useState<string>('');
+  const [stageSavedFeedback, setStageSavedFeedback] = useState(false);
+  const [stageError, setStageError] = useState<string | null>(null);
+
   // Profile Form state
   const [fullName, setFullName] = useState(settings.profile.fullName || '');
   const [wilaya, setWilaya] = useState(settings.profile.wilaya || ALGERIAN_WILAYAS[15]);
@@ -61,6 +83,59 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   const [subject, setSubject] = useState(settings.profile.subject || COMMON_SUBJECTS[0]);
   const [academicYear, setAcademicYear] = useState(settings.profile.academicYear || '2024 - 2025');
   const [profileSavedFeedback, setProfileSavedFeedback] = useState(false);
+
+  // Sync settings when they change externally
+  useEffect(() => {
+    if (settings.educationalStage) {
+      setStage(settings.educationalStage);
+    }
+    if (settings.profile.subject) {
+      setSpecializedSubject(settings.profile.subject);
+      setSubject(settings.profile.subject);
+    }
+  }, [settings]);
+
+  // Handle stage selection
+  const handleStageChange = (newStage: EducationalStage) => {
+    setStage(newStage);
+    setStageError(null);
+    if (newStage === 'middle') {
+      if (!MIDDLE_SUBJECTS_LIST.includes(specializedSubject)) {
+        setSpecializedSubject(MIDDLE_SUBJECTS_LIST[0]);
+      }
+    } else if (newStage === 'secondary') {
+      if (!SECONDARY_SUBJECTS_LIST.includes(specializedSubject)) {
+        setSpecializedSubject(SECONDARY_SUBJECTS_LIST[0]);
+      }
+    }
+  };
+
+  const handleSaveStageSettings = async () => {
+    setStageError(null);
+    let finalSpec = specializedSubject.trim();
+    if (customSpecializedInput.trim()) {
+      finalSpec = customSpecializedInput.trim();
+    }
+
+    if (!finalSpec) {
+      setStageError('يرجى تحديد مادة التخصص الواحدة.');
+      return;
+    }
+
+    if (onSaveStage) {
+      await onSaveStage(stage, finalSpec);
+    } else {
+      await onSaveProfile({
+        ...settings.profile,
+        subject: finalSpec,
+        stage,
+      });
+    }
+
+    setSubject(finalSpec);
+    setStageSavedFeedback(true);
+    setTimeout(() => setStageSavedFeedback(false), 3500);
+  };
 
   // Backup & Restore states
   const [backupMessage, setBackupMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
@@ -105,7 +180,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   };
 
   const handleReset = async () => {
-    if (window.confirm('هل أنت متأكد من رغبتك في استعادة البيانات الافتراضية؟ سيتم تعويض البيانات الحالية بنماذج تجريبية.')) {
+    if (window.confirm('هل أنت متأكد من رغبتك في استعادة البيانات الافتراضية؟ سيتم تعويض البيانات الحالية بنماذج تجريبية للمتوسط والثانوي.')) {
       setIsResetting(true);
       try {
         await onResetToSampleData();
@@ -212,7 +287,184 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
         </div>
       </div>
 
-      {/* 2. Teacher Profile */}
+      {/* 2. Educational Stage & Subjects System (نظام الطور التعليمي) */}
+      <div className="bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+          <div>
+            <div className="flex items-center gap-2">
+              <div className="w-7 h-7 rounded-lg bg-emerald-100 dark:bg-emerald-950/80 text-emerald-700 dark:text-emerald-300 flex items-center justify-center">
+                <GraduationCap className="w-4 h-4" />
+              </div>
+              <h3 className="font-bold text-sm sm:text-base text-slate-900 dark:text-white">
+                نظام الطور التعليمي ومادة التدريس
+              </h3>
+              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800">
+                {stage === 'middle' ? 'التعليم المتوسط' : 'التعليم الثانوي'}
+              </span>
+            </div>
+            <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+              في المتوسط والثانوي: الأستاذ يستطيع تدريس عدة مستويات وأقسام مع تخصيص المادة لكل قسم باستقلالية.
+            </p>
+          </div>
+
+          {onOpenStageWizard && (
+            <button
+              type="button"
+              onClick={onOpenStageWizard}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 text-xs font-semibold text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition self-start sm:self-auto"
+            >
+              <SlidersHorizontal className="w-3.5 h-3.5 text-emerald-600" />
+              <span>معالج الطور السريع</span>
+            </button>
+          )}
+        </div>
+
+        {stageError && (
+          <div className="p-3 rounded-xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900/60 flex items-center gap-2 text-rose-700 dark:text-rose-400 text-xs">
+            <AlertCircle className="w-4 h-4 shrink-0" />
+            <span>{stageError}</span>
+          </div>
+        )}
+
+        {/* 2 Stage Selector Cards */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+          {/* Middle */}
+          <div
+            onClick={() => handleStageChange('middle')}
+            className={`cursor-pointer p-3.5 rounded-2xl border transition-all text-right ${
+              stage === 'middle'
+                ? 'bg-emerald-50/80 dark:bg-emerald-950/40 border-emerald-500 shadow-sm ring-2 ring-emerald-500/20'
+                : 'bg-slate-50/50 dark:bg-slate-800/40 border-slate-200 dark:border-slate-700 hover:border-slate-300'
+            }`}
+          >
+            <div className="flex items-center justify-between mb-1.5">
+              <span className="text-lg">📚</span>
+              {stage === 'middle' && (
+                <div className="w-4 h-4 rounded-full bg-emerald-600 text-white flex items-center justify-center">
+                  <Check className="w-2.5 h-2.5 stroke-[3]" />
+                </div>
+              )}
+            </div>
+            <h4 className="font-extrabold text-xs sm:text-sm text-slate-900 dark:text-white">
+              التعليم المتوسط
+            </h4>
+            <span className="inline-block mt-1 px-1.5 py-0.5 rounded-md bg-sky-100 dark:bg-sky-950 text-sky-800 dark:text-sky-300 text-[10px] font-bold">
+              تدريس عدة مستويات (1م - 4م)
+            </span>
+            <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1.5 leading-relaxed">
+              تدريس عدة مستويات وأفواج (من 1 إلى 4 متوسط BEM) وتعيين مادة كل قسم باستقلالية.
+            </p>
+          </div>
+
+          {/* Secondary */}
+          <div
+            onClick={() => handleStageChange('secondary')}
+            className={`cursor-pointer p-3.5 rounded-2xl border transition-all text-right ${
+              stage === 'secondary'
+                ? 'bg-emerald-50/80 dark:bg-emerald-950/40 border-emerald-500 shadow-sm ring-2 ring-emerald-500/20'
+                : 'bg-slate-50/50 dark:bg-slate-800/40 border-slate-200 dark:border-slate-700 hover:border-slate-300'
+            }`}
+          >
+            <div className="flex items-center justify-between mb-1.5">
+              <span className="text-lg">🎓</span>
+              {stage === 'secondary' && (
+                <div className="w-4 h-4 rounded-full bg-emerald-600 text-white flex items-center justify-center">
+                  <Check className="w-2.5 h-2.5 stroke-[3]" />
+                </div>
+              )}
+            </div>
+            <h4 className="font-extrabold text-xs sm:text-sm text-slate-900 dark:text-white">
+              التعليم الثانوي
+            </h4>
+            <span className="inline-block mt-1 px-1.5 py-0.5 rounded-md bg-violet-100 dark:bg-violet-950 text-violet-800 dark:text-violet-300 text-[10px] font-bold">
+              تدريس عدة مستويات وشعب (1ث - 3ث)
+            </span>
+            <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1.5 leading-relaxed">
+              تدريس عدة مستويات وشعب (1 إلى 3 ثانوي بكالوريا) مع تعيين المادة لكل قسم بحرية.
+            </p>
+          </div>
+        </div>
+
+        {/* Specialized / Taught Subject Selection */}
+        <div className="p-4 rounded-2xl bg-sky-50/50 dark:bg-sky-950/20 border border-sky-200 dark:border-sky-900/50 space-y-3">
+          <div>
+            <h4 className="font-bold text-xs sm:text-sm text-slate-900 dark:text-white flex items-center gap-1.5">
+              <BookOpen className="w-4 h-4 text-sky-600" />
+              <span>مادة التدريس المعتمدة للأستاذ</span>
+            </h4>
+            <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
+              اختر مادة تدريسك المقررة في الطور {stage === 'middle' ? 'المتوسط' : 'الثانوي'}، مع إمكانية تدريس عدة مستويات وأفواج وتعديل مادة أي قسم بشكل مستقل:
+            </p>
+          </div>
+
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 max-h-48 overflow-y-auto p-1">
+            {(stage === 'middle' ? MIDDLE_SUBJECTS_LIST : SECONDARY_SUBJECTS_LIST).map((subj) => {
+              const isSelected = specializedSubject === subj && !customSpecializedInput.trim();
+              return (
+                <button
+                  key={subj}
+                  type="button"
+                  onClick={() => {
+                    setSpecializedSubject(subj);
+                    setCustomSpecializedInput('');
+                    setStageError(null);
+                  }}
+                  className={`p-2 rounded-xl border text-xs font-bold transition flex items-center justify-between text-right ${
+                    isSelected
+                      ? 'bg-emerald-600 text-white border-emerald-600 shadow-xs'
+                      : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:border-sky-400'
+                  }`}
+                >
+                  <span className="truncate">{subj}</span>
+                  {isSelected && <Check className="w-3 h-3 mr-1 shrink-0 stroke-[3]" />}
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Custom Subject field */}
+          <div className="pt-2 border-t border-sky-200/60 dark:border-sky-900/40">
+            <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+              أو اكتب مادة التخصص يدوياً:
+            </label>
+            <input
+              type="text"
+              value={customSpecializedInput}
+              onChange={(e) => {
+                setCustomSpecializedInput(e.target.value);
+                if (e.target.value.trim()) {
+                  setSpecializedSubject(e.target.value.trim());
+                }
+                setStageError(null);
+              }}
+              placeholder="مثال: هندسة الطرائق، الإعلام الآلي، الفلسفة..."
+              className="w-full px-3 py-1.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-xs font-medium focus:outline-hidden focus:ring-2 focus:ring-sky-500/40"
+            />
+          </div>
+        </div>
+
+        {/* Save Stage Button */}
+        <div className="pt-2 flex items-center justify-between">
+          <div className="text-xs">
+            {stageSavedFeedback && (
+              <span className="font-bold text-emerald-600 dark:text-emerald-400 flex items-center gap-1">
+                <CheckCircle className="w-4 h-4" />
+                تم حفظ الطور والمادة بنجاح في IndexedDB!
+              </span>
+            )}
+          </div>
+          <button
+            type="button"
+            onClick={handleSaveStageSettings}
+            className="px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs sm:text-sm font-bold shadow-md shadow-emerald-700/20 transition transform active:scale-95 flex items-center gap-2"
+          >
+            <Check className="w-4 h-4 stroke-[3]" />
+            <span>حفظ إعدادات الطور والمادة</span>
+          </button>
+        </div>
+      </div>
+
+      {/* 3. Teacher Profile */}
       <div className="bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs space-y-4">
         <div className="flex items-center justify-between">
           <div>
@@ -281,13 +533,13 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
 
             <div>
               <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-                مادة التدريس
+                مادة التخصص / التدريس
               </label>
               <input
                 type="text"
                 value={subject}
                 onChange={(e) => setSubject(e.target.value)}
-                placeholder="علوم الطبيعة والحياة"
+                placeholder="علوم الطبيعة والحياة أو الرياضيات"
                 className="w-full px-3.5 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-xs sm:text-sm font-medium focus:outline-hidden focus:ring-2 focus:ring-emerald-500/30 focus:border-emerald-600"
               />
             </div>

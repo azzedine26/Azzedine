@@ -1,10 +1,10 @@
-export type EducationalStage = 'primary' | 'middle' | 'secondary';
+export type EducationalStage = 'middle' | 'secondary';
 
 export interface ClassItem {
   id: string;
-  name: string; // e.g., "3 ع ت 1" أو "4 م 2" أو "5 إبتدائي 1"
-  stage: EducationalStage; // ابتدائي / متوسط / ثانوي
-  grade: string; // e.g. "السنة 3 ثانوي (بكالوريا)"
+  name: string; // e.g., "3 ع ت 1" أو "4 م 2" أو "1 ج م ع 1"
+  stage: EducationalStage; // متوسط / ثانوي
+  grade: string; // e.g. "السنة 3 ثانوي (بكالوريا)" أو "السنة الرابعة متوسط"
   subject: string; // e.g. "علوم الطبيعة والحياة"
   room?: string; // رقم الحجرة / القاعة
   academicYear: string; // e.g. "2024 - 2025"
@@ -74,6 +74,7 @@ export interface TeacherProfile {
   schoolName: string; // اسم المؤسسة
   subject: string; // المادة الرئيسية
   academicYear: string; // السنة الدراسية
+  stage?: EducationalStage; // الطور التعليمي
 }
 
 export type ThemeMode = 'light' | 'dark' | 'system';
@@ -138,6 +139,7 @@ export interface AppSettings {
   theme: ThemeMode;
   profile: TeacherProfile;
   hasSeenSplash: boolean;
+  educationalStage?: EducationalStage; // الطور التعليمي: 'middle' | 'secondary'
   lastBackupDate?: string;
   updatedAt: number;
 }

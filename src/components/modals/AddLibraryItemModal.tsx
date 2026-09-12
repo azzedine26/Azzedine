@@ -3,7 +3,7 @@ import {
   X, 
   Upload, 
   FileText, 
-  Image as ImageIcon, 
+  ImageIcon, 
   File, 
   FolderPlus, 
   Folder, 
@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 import { ClassItem, LibraryItem, LibraryItemType, LibraryFileRecord } from '../../types';
 import { databaseService } from '../../db/databaseService';
+import { getSubjectsForGradeAndStage } from '../../data/algerianData';
 
 interface AddLibraryItemModalProps {
   isOpen: boolean;
@@ -59,28 +60,38 @@ export const AddLibraryItemModal: React.FC<AddLibraryItemModalProps> = ({
   const [folderName, setFolderName] = useState(defaultFolder);
   const [customFolder, setCustomFolder] = useState('');
   const [isCustomFolder, setIsCustomFolder] = useState(false);
-  const [subject, setSubject] = useState(defaultSubject || (classes[0]?.subject || 'مادة عامة'));
+  const [subject, setSubject] = useState(defaultSubject || (classes[0]?.subject || 'الرياضيات'));
   const [classId, setClassId] = useState(defaultClassId);
   const [noteContent, setNoteContent] = useState('');
 
   const [error, setError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
 
-  if (!isOpen) return null;
-
   // Combine default preset folders and existing teacher folders
   const allFolderOptions = Array.from(new Set([...DEFAULT_PRESET_FOLDERS, ...existingFolders]));
 
-  // Unique subjects from classes
-  const subjectOptions = Array.from(
-    new Set(classes.map((c) => c.subject).filter(Boolean))
-  );
-  if (defaultSubject && !subjectOptions.includes(defaultSubject)) {
-    subjectOptions.unshift(defaultSubject);
-  }
-  if (!subjectOptions.includes('مادة عامة')) {
-    subjectOptions.push('مادة عامة');
-  }
+  // Selected class
+  const selectedClass = classes.find((c) => c.id === classId) || null;
+
+  const subjectOptions = React.useMemo(() => {
+    if (selectedClass) {
+      const gradeSubs = getSubjectsForGradeAndStage(selectedClass.stage, selectedClass.grade, [selectedClass.subject]);
+      if (gradeSubs.length > 0) {
+        return gradeSubs;
+      }
+    }
+    const set = new Set<string>();
+    classes.forEach((c) => {
+      if (c.subject) set.add(c.subject.trim());
+      const gradeSubs = getSubjectsForGradeAndStage(c.stage, c.grade, [c.subject]);
+      gradeSubs.forEach((s) => set.add(s));
+    });
+    if (defaultSubject) set.add(defaultSubject.trim());
+    if (set.size === 0) set.add('الرياضيات');
+    return Array.from(set);
+  }, [selectedClass, classes, defaultSubject]);
+
+  if (!isOpen) return null;
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -257,7 +268,7 @@ export const AddLibraryItemModal: React.FC<AddLibraryItemModalProps> = ({
         </div>
 
         {/* Modal Body / Form */}
-        <form onSubmit={handleSubmit} className="p-4 sm:p-6 overflow-y-auto flex-1 space-y-4">
+        <form onSubmit={handleSubmit} className="p-4 sm:p-6 overflow-y-auto flex-1 min-h-0 space-y-4">
           {error && (
             <div className="p-3.5 rounded-xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900/60 flex items-center gap-2.5 text-rose-700 dark:text-rose-400 text-xs sm:text-sm">
               <AlertCircle className="w-4 h-4 shrink-0" />
@@ -428,20 +439,20 @@ export const AddLibraryItemModal: React.FC<AddLibraryItemModalProps> = ({
               )}
             </div>
 
-            {/* Subject selection */}
+            {/* Subject (تلقائي من مادة تدريس الأستاذ) */}
             <div>
-              <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-                المادة:
+              <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1 flex items-center gap-1.5">
+                <BookOpen className="w-3.5 h-3.5 text-emerald-600" />
+                <span>المادة</span>
               </label>
-              <select
-                value={subject}
-                onChange={(e) => setSubject(e.target.value)}
-                className="w-full px-3 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-xs sm:text-sm focus:ring-2 focus:ring-emerald-500 outline-none transition"
-              >
-                {subjectOptions.map((s) => (
-                  <option key={s} value={s}>{s}</option>
-                ))}
-              </select>
+              <div className="h-10 px-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/80 dark:bg-slate-800/80 flex items-center justify-between">
+                <span className="text-xs sm:text-sm font-extrabold text-slate-900 dark:text-white">
+                  {subject || defaultSubject || 'الرياضيات'}
+                </span>
+                <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300">
+                  تلقائي
+                </span>
+              </div>
             </div>
 
             {/* Class selection */}

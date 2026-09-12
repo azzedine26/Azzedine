@@ -104,7 +104,13 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               أهلاً بك، {profile.fullName || 'أستاذنا الفاضل'}
             </h2>
 
-            <div className="flex flex-wrap items-center gap-4 text-xs sm:text-sm text-emerald-100/90 pt-1">
+            <div className="flex flex-wrap items-center gap-3 text-xs sm:text-sm text-emerald-100/90 pt-1">
+              <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-white/15 backdrop-blur-xs text-white font-bold text-xs border border-white/20">
+                <GraduationCap className="w-3.5 h-3.5 text-amber-300" />
+                <span>
+                  {profile.stage === 'middle' ? 'التعليم المتوسط' : 'التعليم الثانوي'}
+                </span>
+              </div>
               <div className="flex items-center gap-1.5">
                 <School className="w-4 h-4 text-emerald-300" />
                 <span>{profile.schoolName || 'المؤسسة التربوية'}</span>
@@ -115,7 +121,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               </div>
               <div className="flex items-center gap-1.5">
                 <Sparkles className="w-4 h-4 text-amber-300" />
-                <span>مادة {profile.subject || 'التدريس'}</span>
+                <span>مادة التدريس: {profile.subject || 'الرياضيات'}</span>
               </div>
             </div>
           </div>

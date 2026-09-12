@@ -1,7 +1,11 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { X, Clock, BookOpen, GraduationCap, MapPin, FileText, Calendar, Sparkles } from 'lucide-react';
 import { ClassItem, DayOfWeek, ScheduleSession } from '../../types';
-import { WEEK_DAYS, COMMON_TIME_SLOTS } from '../../data/algerianData';
+import { 
+  WEEK_DAYS, 
+  COMMON_TIME_SLOTS, 
+  getSubjectsForGradeAndStage
+} from '../../data/algerianData';
 
 interface AddSessionModalProps {
   isOpen: boolean;
@@ -9,6 +13,7 @@ interface AddSessionModalProps {
   onSave: (session: ScheduleSession | Omit<ScheduleSession, 'createdAt' | 'updatedAt'>) => Promise<void>;
   classes: ClassItem[];
   defaultDay?: DayOfWeek;
+  defaultSubject?: string;
   editingSession?: ScheduleSession | null;
 }
 
@@ -18,11 +23,12 @@ export const AddSessionModal: React.FC<AddSessionModalProps> = ({
   onSave,
   classes,
   defaultDay = 'sunday',
+  defaultSubject = 'الرياضيات',
   editingSession = null,
 }) => {
   const [dayOfWeek, setDayOfWeek] = useState<DayOfWeek>(defaultDay);
   const [classId, setClassId] = useState<string>('');
-  const [subject, setSubject] = useState<string>('');
+  const [subject, setSubject] = useState<string>(defaultSubject || 'الرياضيات');
   const [startTime, setStartTime] = useState<string>('08:00');
   const [endTime, setEndTime] = useState<string>('10:00');
   const [room, setRoom] = useState<string>('');
@@ -32,12 +38,16 @@ export const AddSessionModal: React.FC<AddSessionModalProps> = ({
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  const selectedClass = useMemo(() => {
+    return classes.find((c) => c.id === classId) || null;
+  }, [classes, classId]);
+
   // Sync state when modal opens or editingSession changes
   useEffect(() => {
     if (editingSession) {
       setDayOfWeek(editingSession.dayOfWeek);
       setClassId(editingSession.classId);
-      setSubject(editingSession.subject);
+      setSubject(editingSession.subject || defaultSubject || 'الرياضيات');
       setStartTime(editingSession.startTime);
       setEndTime(editingSession.endTime);
       setRoom(editingSession.room || '');
@@ -48,12 +58,12 @@ export const AddSessionModal: React.FC<AddSessionModalProps> = ({
       if (classes.length > 0) {
         const first = classes[0];
         setClassId(first.id);
-        setSubject(first.subject || '');
+        setSubject(first.subject || defaultSubject || 'الرياضيات');
         setRoom(first.room || '');
         setColor(first.color || '#006233');
       } else {
         setClassId('');
-        setSubject('');
+        setSubject(defaultSubject || 'الرياضيات');
         setRoom('');
         setColor('#006233');
       }
@@ -62,7 +72,7 @@ export const AddSessionModal: React.FC<AddSessionModalProps> = ({
       setNotes('');
     }
     setErrors({});
-  }, [editingSession, defaultDay, classes, isOpen]);
+  }, [editingSession, defaultDay, classes, isOpen, defaultSubject]);
 
   if (!isOpen) return null;
 
@@ -71,8 +81,8 @@ export const AddSessionModal: React.FC<AddSessionModalProps> = ({
     setClassId(selectedId);
     const foundClass = classes.find((c) => c.id === selectedId);
     if (foundClass) {
-      if (!subject || subject === '' || editingSession?.classId !== selectedId) {
-        setSubject(foundClass.subject || '');
+      if (!editingSession) {
+        setSubject(foundClass.subject || defaultSubject || 'الرياضيات');
       }
       if (!room || room === '') {
         setRoom(foundClass.room || '');
@@ -229,7 +239,7 @@ export const AddSessionModal: React.FC<AddSessionModalProps> = ({
                   <option value="">-- اختر القسم --</option>
                   {classes.map((cls) => (
                     <option key={cls.id} value={cls.id}>
-                      {cls.name} ({cls.stage === 'secondary' ? 'ثانوي' : cls.stage === 'middle' ? 'متوسط' : 'ابتدائي'})
+                      {cls.name} ({cls.stage === 'secondary' ? 'ثانوي' : 'متوسط'})
                     </option>
                   ))}
                 </select>
@@ -240,16 +250,16 @@ export const AddSessionModal: React.FC<AddSessionModalProps> = ({
             <div>
               <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1 flex items-center gap-1.5">
                 <BookOpen className="w-3.5 h-3.5 text-emerald-600" />
-                <span>المادة *</span>
+                <span>مادة الحصة</span>
               </label>
-              <input
-                type="text"
-                value={subject}
-                onChange={(e) => setSubject(e.target.value)}
-                placeholder="مثال: علوم الطبيعة والحياة"
-                className="w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-xs sm:text-sm font-medium focus:outline-hidden focus:ring-2 focus:ring-emerald-500/30 focus:border-emerald-600"
-              />
-              {errors.subject && <p className="text-[11px] text-rose-500 mt-1">{errors.subject}</p>}
+              <div className="h-10 px-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/80 dark:bg-slate-800/80 flex items-center justify-between">
+                <span className="text-xs sm:text-sm font-extrabold text-slate-900 dark:text-white">
+                  {subject || defaultSubject || 'الرياضيات'}
+                </span>
+                <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300">
+                  تلقائي
+                </span>
+              </div>
             </div>
           </div>
 

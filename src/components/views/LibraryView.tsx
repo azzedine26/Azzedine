@@ -30,6 +30,7 @@ import { ClassItem, LibraryItem, LibraryItemType, TeacherProfile } from '../../t
 import { AddLibraryItemModal } from '../modals/AddLibraryItemModal';
 import { FilePreviewModal } from '../modals/FilePreviewModal';
 import { RenameLibraryItemModal } from '../modals/RenameLibraryItemModal';
+import { getSubjectsForGradeAndStage } from '../../data/algerianData';
 
 interface LibraryViewProps {
   items: LibraryItem[];
@@ -75,18 +76,33 @@ export const LibraryView: React.FC<LibraryViewProps> = ({
     return Array.from(set);
   }, [items]);
 
-  // Extract all unique subjects
+  // Extract all unique subjects (grade-aware for primary classes)
   const availableSubjects = useMemo(() => {
     const set = new Set<string>();
-    if (profile.subject) set.add(profile.subject.trim());
-    classes.forEach((c) => {
-      if (c.subject) set.add(c.subject.trim());
-    });
-    items.forEach((i) => {
-      if (i.subject) set.add(i.subject.trim());
-    });
+    if (selectedClassId !== 'ALL') {
+      const matched = classes.find((c) => c.id === selectedClassId);
+      if (matched) {
+        const gradeSubs = getSubjectsForGradeAndStage(matched.stage, matched.grade, [matched.subject]);
+        gradeSubs.forEach((s) => set.add(s));
+      }
+      items
+        .filter((i) => i.classId === selectedClassId)
+        .forEach((i) => {
+          if (i.subject) set.add(i.subject.trim());
+        });
+    } else {
+      if (profile.subject) set.add(profile.subject.trim());
+      classes.forEach((c) => {
+        if (c.subject) set.add(c.subject.trim());
+        const gradeSubs = getSubjectsForGradeAndStage(c.stage, c.grade, [c.subject]);
+        gradeSubs.forEach((s) => set.add(s));
+      });
+      items.forEach((i) => {
+        if (i.subject) set.add(i.subject.trim());
+      });
+    }
     return Array.from(set);
-  }, [profile, classes, items]);
+  }, [profile, classes, items, selectedClassId]);
 
   // Global Statistics
   const stats = useMemo(() => {

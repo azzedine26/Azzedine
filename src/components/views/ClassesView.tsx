@@ -102,16 +102,6 @@ export const ClassesView: React.FC<ClassesViewProps> = ({
             الكل ({classes.length})
           </button>
           <button
-            onClick={() => setSelectedStage('secondary')}
-            className={`px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition ${
-              selectedStage === 'secondary'
-                ? 'bg-emerald-600 text-white shadow-xs'
-                : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
-            }`}
-          >
-            ثانوي ({classes.filter((c) => c.stage === 'secondary').length})
-          </button>
-          <button
             onClick={() => setSelectedStage('middle')}
             className={`px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition ${
               selectedStage === 'middle'
@@ -122,14 +112,14 @@ export const ClassesView: React.FC<ClassesViewProps> = ({
             متوسط ({classes.filter((c) => c.stage === 'middle').length})
           </button>
           <button
-            onClick={() => setSelectedStage('primary')}
+            onClick={() => setSelectedStage('secondary')}
             className={`px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition ${
-              selectedStage === 'primary'
+              selectedStage === 'secondary'
                 ? 'bg-emerald-600 text-white shadow-xs'
                 : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
             }`}
           >
-            ابتدائي ({classes.filter((c) => c.stage === 'primary').length})
+            ثانوي ({classes.filter((c) => c.stage === 'secondary').length})
           </button>
         </div>
       </div>
@@ -162,9 +152,7 @@ export const ClassesView: React.FC<ClassesViewProps> = ({
             const stageLabel =
               cls.stage === 'secondary'
                 ? 'التعليم الثانوي'
-                : cls.stage === 'middle'
-                ? 'التعليم المتوسط'
-                : 'التعليم الابتدائي';
+                : 'التعليم المتوسط';
 
             return (
               <div

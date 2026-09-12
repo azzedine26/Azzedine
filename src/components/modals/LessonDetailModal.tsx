@@ -29,14 +29,14 @@ export function LessonDetailModal({
   };
 
   return (
-    <div className="fixed inset-0 z-[100] overflow-y-auto bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4">
+    <div className="fixed inset-0 z-[100] overflow-y-auto bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-2 sm:p-4">
       <div 
-        className="bg-white dark:bg-slate-900 rounded-2xl w-full max-w-3xl border border-slate-200 dark:border-slate-800 shadow-2xl overflow-hidden flex flex-col max-h-[92vh] animate-in fade-in zoom-in-95 duration-200 text-right"
+        className="bg-white dark:bg-slate-900 rounded-2xl w-full max-w-3xl border border-slate-200 dark:border-slate-800 shadow-2xl overflow-hidden flex flex-col h-[94dvh] sm:h-[88vh] max-h-[96dvh] sm:max-h-[90vh] animate-in fade-in zoom-in-95 duration-200 text-right"
         dir="rtl"
       >
         {/* Modal Top Header */}
         <div 
-          className="px-6 py-5 border-b border-slate-100 dark:border-slate-800 text-white relative overflow-hidden"
+          className="px-6 py-5 border-b border-slate-100 dark:border-slate-800 text-white relative overflow-hidden shrink-0"
           style={{ backgroundColor: lesson.color || '#006233' }}
         >
           <div className="relative z-10 flex items-start justify-between gap-4">
@@ -87,7 +87,7 @@ export function LessonDetailModal({
         </div>
 
         {/* Modal Scrollable Content */}
-        <div className="flex-1 overflow-y-auto p-5 sm:p-6 space-y-6">
+        <div className="flex-1 min-h-0 overflow-y-auto p-5 sm:p-6 space-y-6">
           {/* Section: Objectives */}
           <div className="bg-emerald-50/50 dark:bg-emerald-950/20 rounded-2xl p-4 sm:p-5 border border-emerald-100 dark:border-emerald-900/40">
             <h3 className="text-xs font-black tracking-wider text-emerald-800 dark:text-emerald-300 uppercase mb-2.5 flex items-center gap-2">
@@ -170,7 +170,7 @@ export function LessonDetailModal({
         </div>
 
         {/* Modal Bottom Actions */}
-        <div className="flex items-center justify-between px-5 py-4 border-t border-slate-100 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-800/40">
+        <div className="shrink-0 flex items-center justify-between px-5 py-4 border-t border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-900">
           <button
             type="button"
             onClick={() => {
