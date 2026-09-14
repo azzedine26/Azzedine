@@ -58,7 +58,7 @@ export const AddSessionModal: React.FC<AddSessionModalProps> = ({
       if (classes.length > 0) {
         const first = classes[0];
         setClassId(first.id);
-        setSubject(first.subject || defaultSubject || 'الرياضيات');
+        setSubject(defaultSubject || first.subject || 'الرياضيات');
         setRoom(first.room || '');
         setColor(first.color || '#006233');
       } else {
@@ -82,7 +82,7 @@ export const AddSessionModal: React.FC<AddSessionModalProps> = ({
     const foundClass = classes.find((c) => c.id === selectedId);
     if (foundClass) {
       if (!editingSession) {
-        setSubject(foundClass.subject || defaultSubject || 'الرياضيات');
+        setSubject(defaultSubject || foundClass.subject || 'الرياضيات');
       }
       if (!room || room === '') {
         setRoom(foundClass.room || '');
@@ -111,7 +111,8 @@ export const AddSessionModal: React.FC<AddSessionModalProps> = ({
     if (!classId) {
       errs.classId = 'يرجى اختيار القسم التربوي';
     }
-    if (!subject.trim()) {
+    const targetSub = defaultSubject || subject || 'الرياضيات';
+    if (!targetSub.trim()) {
       errs.subject = 'يرجى إدخال اسم المادة';
     }
     if (!startTime) {
@@ -139,7 +140,7 @@ export const AddSessionModal: React.FC<AddSessionModalProps> = ({
         dayOfWeek,
         classId,
         className: selectedClass ? selectedClass.name : '',
-        subject: subject.trim(),
+        subject: (editingSession ? (subject || defaultSubject || 'الرياضيات') : (defaultSubject || subject || 'الرياضيات')).trim(),
         startTime,
         endTime,
         room: room.trim() || undefined,
@@ -254,10 +255,10 @@ export const AddSessionModal: React.FC<AddSessionModalProps> = ({
               </label>
               <div className="h-10 px-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/80 dark:bg-slate-800/80 flex items-center justify-between">
                 <span className="text-xs sm:text-sm font-extrabold text-slate-900 dark:text-white">
-                  {subject || defaultSubject || 'الرياضيات'}
+                  {defaultSubject || subject || 'الرياضيات'}
                 </span>
                 <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300">
-                  تلقائي
+                  تلقائي من إعدادات الأستاذ
                 </span>
               </div>
             </div>

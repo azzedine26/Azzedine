@@ -24,6 +24,8 @@ import { GradeEntryModal } from './components/modals/GradeEntryModal';
 import { ConfirmDeleteModal } from './components/modals/ConfirmDeleteModal';
 import { SubjectSettingModal } from './components/modals/SubjectSettingModal';
 import { EducationalStageModal } from './components/modals/EducationalStageModal';
+import { ExcelImportModal } from './components/modals/ExcelImportModal';
+import { exportStudentsToExcel, generateStudentExcelTemplate } from './utils/excelService';
 import { useTheme } from './hooks/useTheme';
 import { databaseService } from './db/databaseService';
 import { 
@@ -102,6 +104,9 @@ export default function App() {
 
   const [isAddReminderOpen, setIsAddReminderOpen] = useState(false);
   const [editingReminder, setEditingReminder] = useState<ReminderItem | null>(null);
+
+  // Excel Import Modal State
+  const [isExcelImportModalOpen, setIsExcelImportModalOpen] = useState(false);
 
   // Educational Stage Modal State
   const [isEducationalStageModalOpen, setIsEducationalStageModalOpen] = useState(false);
@@ -301,6 +306,68 @@ export default function App() {
       id: studentId,
       name: studentName,
     });
+  };
+
+  // ================= Excel Operations for Students =================
+  const handleExportStudentsExcel = () => {
+    try {
+      const result = exportStudentsToExcel(students, classes, selectedClassFilter);
+      showToast(`تم تصدير ${result.count} تلميذ بنجاح إلى ملف "${result.filename}".`);
+    } catch (err: any) {
+      console.error('Export Excel failed:', err);
+      showToast('حدث خطأ أثناء تصدير ملف Excel.');
+    }
+  };
+
+  const handleDownloadExcelTemplate = () => {
+    try {
+      const result = generateStudentExcelTemplate();
+      showToast(`تم تنزيل نموذج Excel الجاهز "${result.filename}".`);
+    } catch (err: any) {
+      console.error('Download template failed:', err);
+      showToast('حدث خطأ أثناء تنزيل نموذج Excel.');
+    }
+  };
+
+  const handleExcelImportComplete = async (
+    importedStudents: StudentItem[],
+    updatedStudents: StudentItem[],
+    newClassCreated?: ClassItem
+  ) => {
+    try {
+      if (newClassCreated) {
+        await databaseService.addClass(newClassCreated);
+        setClasses((prev) => [newClassCreated, ...prev]);
+      }
+
+      if (importedStudents.length > 0) {
+        await databaseService.bulkSaveStudents(importedStudents);
+      }
+
+      if (updatedStudents.length > 0) {
+        await databaseService.bulkSaveStudents(updatedStudents);
+      }
+
+      // Refresh student list from database
+      const freshStudents = await databaseService.getAllStudents();
+      setStudents(freshStudents);
+
+      const parts: string[] = [];
+      if (importedStudents.length > 0) {
+        parts.push(`إضافة ${importedStudents.length} تلميذ`);
+      }
+      if (updatedStudents.length > 0) {
+        parts.push(`تحديث ${updatedStudents.length} تلميذ`);
+      }
+      if (newClassCreated) {
+        parts.push(`إنشاء قسم "${newClassCreated.name}"`);
+      }
+
+      showToast(`تم بنجاح: ${parts.join(' و ')}.`);
+    } catch (err: any) {
+      console.error('Excel import failed:', err);
+      showToast('حدث خطأ أثناء حفظ بيانات التلاميذ.');
+    }
   };
 
   // ================= Schedule Operations =================
@@ -511,9 +578,27 @@ export default function App() {
 
   // ================= Settings Operations =================
   const handleSaveProfile = async (profile: TeacherProfile) => {
+    const trimmedSubject = profile.subject?.trim();
     const updatedSettings = await databaseService.saveSettings({ profile });
     setSettings(updatedSettings);
-    showToast('تم حفظ بيانات الأستاذ والمؤسسة بنجاح.');
+
+    if (trimmedSubject) {
+      const existing = await databaseService.getAllSubjectSettings();
+      const exists = existing.some((s) => s.name.trim().toLowerCase() === trimmedSubject.toLowerCase());
+      if (!exists) {
+        await databaseService.saveSubjectSetting({
+          id: `subj-spec-${Date.now()}`,
+          name: trimmedSubject,
+          coefficient: 2,
+          calculationMethod: {
+            method: 'tests_avg_plus_exam_x2_div_3',
+          },
+        });
+        const freshSubjects = await databaseService.getAllSubjectSettings();
+        setSubjectSettings(freshSubjects);
+      }
+    }
+    showToast(`تم حفظ بيانات الأستاذ ومادة التدريس المركزية (${trimmedSubject || updatedSettings.profile.subject}) بنجاح.`);
   };
 
   const handleExportBackup = async () => {
@@ -685,37 +770,60 @@ export default function App() {
     setCurrentTab('students');
   };
 
+  // Close mobile sidebar drawer whenever tab changes
+  useEffect(() => {
+    setIsMobileSidebarExpanded(false);
+  }, [currentTab]);
+
   return (
-    <div className="min-h-screen w-full bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-100 flex flex-col font-sans relative">
-      {/* Content wrapper with right padding for the fixed vertical sidebar */}
-      <div
-        className={`flex-1 flex flex-col min-w-0 w-full transition-[padding] duration-300 ease-in-out ${
-          isDesktopSidebarCollapsed ? 'md:pr-20' : 'md:pr-64'
-        } pr-16`}
-      >
-        {/* 1. Offline & Connectivity Banner */}
-        <OfflineIndicator />
+    <div className="min-h-screen min-h-[100dvh] w-full max-w-full bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-100 flex flex-row font-sans relative">
+      {/* 1. In-flow Vertical Sidebar (Desktop only, drawer overlay on mobile) */}
+      <Sidebar
+        currentTab={currentTab}
+        onTabChange={setCurrentTab}
+        classesCount={classes.length}
+        studentsCount={students.length}
+        sessionsCount={sessions.length}
+        lessonsCount={lessons.length}
+        assessmentsCount={assessments.length}
+        attendanceCount={attendanceRecords.length}
+        remindersCount={reminders.filter((r) => !r.isCompleted).length}
+        libraryCount={libraryItems.length}
+        profile={settings.profile}
+        isMobileExpanded={isMobileSidebarExpanded}
+        setIsMobileExpanded={setIsMobileSidebarExpanded}
+        isDesktopCollapsed={isDesktopSidebarCollapsed}
+        setIsDesktopCollapsed={setIsDesktopSidebarCollapsed}
+      />
 
-        {/* 2. Top Header */}
-        <Header
-          currentTab={currentTab}
-          onTabChange={setCurrentTab}
-          isDark={isDark}
-          onToggleTheme={toggleTheme}
-          profile={settings.profile}
-          remindersCount={reminders.filter((r) => !r.isCompleted).length}
-          libraryCount={libraryItems.length}
-          onToggleSidebar={() => {
-            if (window.innerWidth < 768) {
-              setIsMobileSidebarExpanded((prev) => !prev);
-            } else {
-              setIsDesktopSidebarCollapsed((prev) => !prev);
-            }
-          }}
-        />
+      {/* 2. Main content container: flex sibling occupying 100% of remaining width */}
+      <div className="flex-1 min-w-0 flex flex-col min-h-screen max-w-full">
+        {/* Sticky Top Bar (Contains Offline status and main Header) */}
+        <div className="sticky top-0 z-30 w-full bg-white/95 dark:bg-slate-900/95 backdrop-blur-md">
+          {/* Offline & Connectivity Banner */}
+          <OfflineIndicator />
 
-        {/* 3. Main Views Container */}
-        <main className="flex-1 max-w-7xl mx-auto w-full min-w-0 px-3 sm:px-6 lg:px-8 pt-4 sm:pt-6 pb-28 sm:pb-16">
+          {/* Top Header */}
+          <Header
+            currentTab={currentTab}
+            onTabChange={setCurrentTab}
+            isDark={isDark}
+            onToggleTheme={toggleTheme}
+            profile={settings.profile}
+            remindersCount={reminders.filter((r) => !r.isCompleted).length}
+            libraryCount={libraryItems.length}
+            onToggleSidebar={() => {
+              if (typeof window !== 'undefined' && window.innerWidth < 768) {
+                setIsMobileSidebarExpanded((prev) => !prev);
+              } else {
+                setIsDesktopSidebarCollapsed((prev) => !prev);
+              }
+            }}
+          />
+        </div>
+
+        {/* Main Views Container */}
+        <main className="flex-1 max-w-7xl mx-auto w-full min-w-0 px-2.5 sm:px-4 md:px-6 lg:px-8 pt-3 sm:pt-6 pb-20 sm:pb-16">
           {isLoading ? (
             <div className="py-20 text-center flex flex-col items-center justify-center gap-3">
               <div className="w-10 h-10 border-3 border-emerald-600 border-t-transparent rounded-full animate-spin" />
@@ -781,6 +889,7 @@ export default function App() {
               <StudentsView
                 classes={classes}
                 students={students}
+                profile={settings.profile}
                 selectedClassIdFilter={selectedClassFilter}
                 onSelectClassFilter={setSelectedClassFilter}
                 onOpenAddStudent={() => {
@@ -793,6 +902,9 @@ export default function App() {
                 }}
                 onDeleteStudent={handlePromptDeleteStudent}
                 onNavigateToClasses={() => setCurrentTab('classes')}
+                onOpenImportExcel={() => setIsExcelImportModalOpen(true)}
+                onExportExcel={handleExportStudentsExcel}
+                onDownloadTemplate={handleDownloadExcelTemplate}
               />
             )}
 
@@ -800,6 +912,7 @@ export default function App() {
               <LessonsView
                 lessons={lessons}
                 classes={classes}
+                profile={settings.profile}
                 onOpenAddLesson={handleOpenAddLesson}
                 onEditLesson={handleEditLesson}
                 onDeleteLesson={handlePromptDeleteLesson}
@@ -840,6 +953,7 @@ export default function App() {
                 classes={classes}
                 students={students}
                 attendanceRecords={attendanceRecords}
+                profile={settings.profile}
                 onSaveAttendance={handleSaveAttendance}
                 onDeleteAttendance={handleDeleteAttendance}
                 onNavigateToClasses={() => setCurrentTab('classes')}
@@ -907,26 +1021,7 @@ export default function App() {
       </main>
       </div>
 
-      {/* 4. Vertical Sidebar on Side of Screen (Replaces Bottom Navigation) */}
-      <Sidebar
-        currentTab={currentTab}
-        onTabChange={setCurrentTab}
-        classesCount={classes.length}
-        studentsCount={students.length}
-        sessionsCount={sessions.length}
-        lessonsCount={lessons.length}
-        assessmentsCount={assessments.length}
-        attendanceCount={attendanceRecords.length}
-        remindersCount={reminders.filter((r) => !r.isCompleted).length}
-        libraryCount={libraryItems.length}
-        profile={settings.profile}
-        isMobileExpanded={isMobileSidebarExpanded}
-        setIsMobileExpanded={setIsMobileSidebarExpanded}
-        isDesktopCollapsed={isDesktopSidebarCollapsed}
-        setIsDesktopCollapsed={setIsDesktopSidebarCollapsed}
-      />
-
-      {/* 5. Modals */}
+      {/* 3. Modals */}
       <EducationalStageModal
         isOpen={isEducationalStageModalOpen}
         isFirstLaunch={!settings.educationalStage}
@@ -951,7 +1046,7 @@ export default function App() {
         editingClass={editingClass}
         defaultAcademicYear={settings.profile.academicYear}
         defaultStage={settings.educationalStage || 'secondary'}
-        defaultSubject={settings.profile.subject}
+        defaultSubject={settings.profile.subject || 'الرياضيات'}
         primarySubjects={settings.primarySubjects || []}
       />
 
@@ -1035,6 +1130,19 @@ export default function App() {
         onSave={handleSaveReminder}
         classes={classes}
         editingReminder={editingReminder}
+      />
+
+      <ExcelImportModal
+        isOpen={isExcelImportModalOpen}
+        onClose={() => setIsExcelImportModalOpen(false)}
+        classes={classes}
+        existingStudents={students}
+        defaultClassId={selectedClassFilter}
+        defaultAcademicYear={settings.profile?.academicYear || '2024 - 2025'}
+        defaultSubject={settings.profile?.primarySubject || 'الرياضيات'}
+        defaultStage={settings.profile?.educationalStage || 'middle'}
+        onImportComplete={handleExcelImportComplete}
+        onDownloadTemplate={handleDownloadExcelTemplate}
       />
 
       <ConfirmDeleteModal

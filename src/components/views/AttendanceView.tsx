@@ -23,15 +23,21 @@ import {
   Edit3,
   CalendarCheck,
   Check,
-  X
+  X,
+  FileDown,
+  FileText,
+  Loader2
 } from 'lucide-react';
-import { ClassItem, StudentItem, AttendanceRecord, AttendanceStatus, StudentAttendanceEntry } from '../../types';
+import { ClassItem, StudentItem, AttendanceRecord, AttendanceStatus, StudentAttendanceEntry, TeacherProfile } from '../../types';
 import { StudentAttendanceHistoryModal } from '../modals/StudentAttendanceHistoryModal';
+import { exportAttendanceSheetDocx } from '../../utils/docxService';
+import { exportAttendanceSheetPdf } from '../../utils/pdfService';
 
 interface AttendanceViewProps {
   classes: ClassItem[];
   students: StudentItem[];
   attendanceRecords: AttendanceRecord[];
+  profile?: TeacherProfile;
   onSaveAttendance: (record: AttendanceRecord) => Promise<void>;
   onDeleteAttendance?: (id: string) => Promise<void>;
   onNavigateToClasses: () => void;
@@ -42,6 +48,7 @@ export const AttendanceView: React.FC<AttendanceViewProps> = ({
   classes,
   students,
   attendanceRecords,
+  profile,
   onSaveAttendance,
   onDeleteAttendance,
   onNavigateToClasses,
@@ -369,6 +376,62 @@ export const AttendanceView: React.FC<AttendanceViewProps> = ({
     window.print();
   };
 
+  // PDF & Word export states
+  const [isExportingPdf, setIsExportingPdf] = useState(false);
+  const [isExportingWord, setIsExportingWord] = useState(false);
+  const [exportSuccessMessage, setExportSuccessMessage] = useState<string | null>(null);
+
+  const fallbackProfile: TeacherProfile = profile || {
+    fullName: 'أستاذ المادة',
+    schoolName: '',
+    subject: '',
+    academicYear: '2024 - 2025',
+    wilaya: '',
+  };
+
+  // PDF export handler
+  const handleExportAttendancePdf = async () => {
+    if (!activeClass || isExportingPdf) return;
+    setIsExportingPdf(true);
+    try {
+      await exportAttendanceSheetPdf(
+        activeClass,
+        selectedDate,
+        classStudents,
+        attendanceRecords,
+        fallbackProfile
+      );
+      setExportSuccessMessage('تم تصدير سجل الحضور والغياب كملف PDF بنجاح وحفظه في جهازك');
+      setTimeout(() => setExportSuccessMessage(null), 4000);
+    } catch (err) {
+      console.error('Failed to export attendance PDF:', err);
+      window.print();
+    } finally {
+      setIsExportingPdf(false);
+    }
+  };
+
+  // Word export handler
+  const handleExportAttendanceWord = async () => {
+    if (!activeClass || isExportingWord) return;
+    setIsExportingWord(true);
+    try {
+      await exportAttendanceSheetDocx(
+        activeClass,
+        selectedDate,
+        classStudents,
+        attendanceRecords,
+        fallbackProfile
+      );
+      setExportSuccessMessage('تم تصدير سجل الحضور كملف Word (.docx) قابل للتعديل بنجاح');
+      setTimeout(() => setExportSuccessMessage(null), 4000);
+    } catch (err) {
+      console.error('Failed to export attendance Word docx:', err);
+    } finally {
+      setIsExportingWord(false);
+    }
+  };
+
   if (classes.length === 0) {
     return (
       <div className="p-8 text-center rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs max-w-lg mx-auto my-12">
@@ -523,16 +586,54 @@ export const AttendanceView: React.FC<AttendanceViewProps> = ({
               <option value="الفترة المسائية">الفترة المسائية</option>
             </select>
 
+            {/* Export PDF Button */}
+            <button
+              onClick={handleExportAttendancePdf}
+              disabled={isExportingPdf || !activeClass}
+              className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800 hover:bg-emerald-100 dark:hover:bg-emerald-900/60 disabled:opacity-50 text-xs font-bold transition shadow-xs cursor-pointer active:scale-95"
+              title="تصدير ورقة الحضور والغياب الرسمية كملف PDF"
+            >
+              {isExportingPdf ? (
+                <Loader2 className="w-3.5 h-3.5 animate-spin text-emerald-600" />
+              ) : (
+                <FileDown className="w-3.5 h-3.5 text-emerald-600" />
+              )}
+              <span>PDF</span>
+            </button>
+
+            {/* Export Word Button */}
+            <button
+              onClick={handleExportAttendanceWord}
+              disabled={isExportingWord || !activeClass}
+              className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 border border-blue-300 dark:border-blue-800 hover:bg-blue-100 dark:hover:bg-blue-900/60 disabled:opacity-50 text-xs font-bold transition shadow-xs cursor-pointer active:scale-95"
+              title="تصدير ورقة الحضور كملف Word (.docx) قابل للتعديل"
+            >
+              {isExportingWord ? (
+                <Loader2 className="w-3.5 h-3.5 animate-spin text-blue-600" />
+              ) : (
+                <FileText className="w-3.5 h-3.5 text-blue-600" />
+              )}
+              <span>Word</span>
+            </button>
+
             {/* Print Button */}
             <button
               onClick={handlePrintSheet}
-              className="p-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-50 dark:hover:bg-slate-700 transition"
+              className="p-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-50 dark:hover:bg-slate-700 transition"
               title="طباعة ورقة الحضور والغياب"
             >
               <Printer className="w-4 h-4" />
             </button>
           </div>
         </div>
+
+        {/* Success Alert Banner */}
+        {exportSuccessMessage && (
+          <div className="mt-3 p-3 rounded-xl bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200 dark:border-emerald-800 text-emerald-800 dark:text-emerald-200 text-xs font-bold flex items-center gap-2 animate-in fade-in">
+            <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+            <span>{exportSuccessMessage}</span>
+          </div>
+        )}
       </div>
 
       {/* ========================================================================= */}

@@ -257,6 +257,34 @@ export const databaseService = {
     });
   },
 
+  async bulkSaveStudents(studentsToSave: StudentItem[]): Promise<void> {
+    if (!studentsToSave.length) return;
+    return withStore<void>(STORES.STUDENTS, 'readwrite', (store) => {
+      return new Promise((resolve, reject) => {
+        let remaining = studentsToSave.length;
+        let hasError = false;
+        for (const st of studentsToSave) {
+          const itemWithTimestamps: StudentItem = {
+            ...st,
+            createdAt: st.createdAt || Date.now(),
+            updatedAt: Date.now()
+          };
+          const req = store.put(itemWithTimestamps);
+          req.onsuccess = () => {
+            remaining--;
+            if (remaining === 0 && !hasError) {
+              resolve();
+            }
+          };
+          req.onerror = () => {
+            hasError = true;
+            reject(req.error);
+          };
+        }
+      });
+    });
+  },
+
   async deleteStudent(id: string): Promise<void> {
     return withStore<void>(STORES.STUDENTS, 'readwrite', (store) => {
       return new Promise((resolve, reject) => {

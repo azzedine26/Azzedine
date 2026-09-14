@@ -10,33 +10,90 @@ import {
   FileText, 
   Pencil, 
   Trash2,
-  GraduationCap
+  GraduationCap,
+  FileSpreadsheet,
+  Upload,
+  Download,
+  FileDown,
+  Loader2,
+  CheckCircle2
 } from 'lucide-react';
-import { ClassItem, StudentItem } from '../../types';
+import { ClassItem, StudentItem, TeacherProfile } from '../../types';
+import { exportStudentsListDocx } from '../../utils/docxService';
+import { exportStudentsListPdf } from '../../utils/pdfService';
 
 interface StudentsViewProps {
   classes: ClassItem[];
   students: StudentItem[];
+  profile?: TeacherProfile;
   selectedClassIdFilter?: string;
   onSelectClassFilter: (classId: string) => void;
   onOpenAddStudent: () => void;
   onEditStudent: (studentItem: StudentItem) => void;
   onDeleteStudent: (studentId: string, studentName: string) => void;
   onNavigateToClasses: () => void;
+  onOpenImportExcel: () => void;
+  onExportExcel: () => void;
+  onDownloadTemplate: () => void;
 }
 
 export const StudentsView: React.FC<StudentsViewProps> = ({
   classes,
   students,
+  profile,
   selectedClassIdFilter = 'all',
   onSelectClassFilter,
   onOpenAddStudent,
   onEditStudent,
   onDeleteStudent,
   onNavigateToClasses,
+  onOpenImportExcel,
+  onExportExcel,
+  onDownloadTemplate,
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [genderFilter, setGenderFilter] = useState<'all' | 'male' | 'female'>('all');
+  const [isExportingPdf, setIsExportingPdf] = useState(false);
+  const [isExportingWord, setIsExportingWord] = useState(false);
+  const [exportSuccessMessage, setExportSuccessMessage] = useState<string | null>(null);
+
+  const fallbackProfile: TeacherProfile = profile || {
+    fullName: 'أستاذ المادة',
+    schoolName: '',
+    subject: '',
+    academicYear: '2024 - 2025',
+    wilaya: '',
+  };
+
+  const handleExportStudentsPdf = async () => {
+    if (isExportingPdf || filteredStudents.length === 0) return;
+    setIsExportingPdf(true);
+    try {
+      const targetClass = selectedClassIdFilter !== 'all' ? classes.find(c => c.id === selectedClassIdFilter) : null;
+      await exportStudentsListPdf(filteredStudents, targetClass, fallbackProfile);
+      setExportSuccessMessage('تم تصدير قائمة التلاميذ كملف PDF بنجاح وحفظه في جهازك');
+      setTimeout(() => setExportSuccessMessage(null), 4000);
+    } catch (err) {
+      console.error('Failed to export students PDF:', err);
+    } finally {
+      setIsExportingPdf(false);
+    }
+  };
+
+  const handleExportStudentsWord = async () => {
+    if (isExportingWord || filteredStudents.length === 0) return;
+    setIsExportingWord(true);
+    try {
+      const targetClass = selectedClassIdFilter !== 'all' ? classes.find(c => c.id === selectedClassIdFilter) : null;
+      await exportStudentsListDocx(filteredStudents, targetClass, fallbackProfile);
+      setExportSuccessMessage('تم تصدير قائمة التلاميذ كملف Word (.docx) قابل للتعديل بنجاح');
+      setTimeout(() => setExportSuccessMessage(null), 4000);
+    } catch (err) {
+      console.error('Failed to export students Word docx:', err);
+    } finally {
+      setIsExportingWord(false);
+    }
+  };
 
   // Filter students
   const filteredStudents = useMemo(() => {
@@ -62,7 +119,7 @@ export const StudentsView: React.FC<StudentsViewProps> = ({
   const currentFemales = filteredStudents.filter((s) => s.gender === 'female').length;
 
   return (
-    <div className="space-y-6 pb-12">
+    <div className="space-y-5 pb-12">
       {/* Top Bar: Title & Action */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
@@ -87,6 +144,108 @@ export const StudentsView: React.FC<StudentsViewProps> = ({
           <Plus className="w-4 h-4" />
           <span>تسجيل طالب جديد</span>
         </button>
+      </div>
+
+      {/* Excel Management Bar (Import, Export, Download Template) */}
+      <div className="bg-white dark:bg-slate-900 p-3.5 sm:p-4 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs flex flex-col gap-3">
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
+          <div className="flex items-center gap-2.5 text-right">
+            <div className="w-8 h-8 rounded-xl bg-emerald-50 dark:bg-emerald-950/70 text-emerald-600 dark:text-emerald-400 flex items-center justify-center shrink-0">
+              <FileSpreadsheet className="w-4 h-4" />
+            </div>
+            <div>
+              <span className="text-xs sm:text-sm font-bold text-slate-900 dark:text-white block">
+                إدارة القوائم عبر Excel
+              </span>
+              <span className="text-[11px] text-slate-500 dark:text-slate-400 block">
+                تصدير واستيراد قوائم التلاميذ بصيغة <strong className="font-mono text-emerald-600 dark:text-emerald-400">.xlsx</strong> محلياً 100% دون خادم
+              </span>
+            </div>
+          </div>
+
+          {/* Action Buttons: [ تصدير PDF ]   [ تصدير Word ]   [ استيراد من Excel ]   [ تصدير Excel ] */}
+          <div className="flex items-center flex-wrap gap-2 sm:shrink-0">
+            {/* Export PDF Button */}
+            <button
+              type="button"
+              onClick={handleExportStudentsPdf}
+              disabled={filteredStudents.length === 0 || isExportingPdf}
+              className="inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800 hover:bg-emerald-100 dark:hover:bg-emerald-900/60 disabled:opacity-50 text-xs sm:text-sm font-bold transition shadow-xs active:scale-95 cursor-pointer"
+              title="تصدير قائمة التلاميذ الحالية كملف PDF عالي الدقة"
+            >
+              {isExportingPdf ? (
+                <Loader2 className="w-4 h-4 animate-spin text-emerald-600" />
+              ) : (
+                <FileDown className="w-4 h-4 text-emerald-600" />
+              )}
+              <span>تصدير PDF</span>
+            </button>
+
+            {/* Export Word (.docx) Button */}
+            <button
+              type="button"
+              onClick={handleExportStudentsWord}
+              disabled={filteredStudents.length === 0 || isExportingWord}
+              className="inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 border border-blue-300 dark:border-blue-800 hover:bg-blue-100 dark:hover:bg-blue-900/60 disabled:opacity-50 text-xs sm:text-sm font-bold transition shadow-xs active:scale-95 cursor-pointer"
+              title="تصدير قائمة التلاميذ الحالية كملف Word (.docx) قابل للتعديل"
+            >
+              {isExportingWord ? (
+                <Loader2 className="w-4 h-4 animate-spin text-blue-600" />
+              ) : (
+                <FileText className="w-4 h-4 text-blue-600" />
+              )}
+              <span>تصدير Word</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={onOpenImportExcel}
+              className="inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-300 dark:border-slate-700 hover:bg-slate-200 dark:hover:bg-slate-700 text-xs sm:text-sm font-bold transition shadow-xs active:scale-95 cursor-pointer"
+              title="استيراد قائمة تلاميذ من ملف Excel"
+            >
+              <Upload className="w-4 h-4 text-slate-600 dark:text-slate-400" />
+              <span>استيراد Excel</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={onExportExcel}
+              disabled={students.length === 0}
+              className="inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl bg-sky-50 dark:bg-sky-950/60 text-sky-700 dark:text-sky-300 border border-sky-300 dark:border-sky-800 hover:bg-sky-100 dark:hover:bg-sky-900/60 disabled:opacity-50 text-xs sm:text-sm font-bold transition shadow-xs active:scale-95 cursor-pointer"
+              title="تصدير قائمة التلاميذ الحالية إلى ملف Excel"
+            >
+              <Download className="w-4 h-4 text-sky-600" />
+              <span>تصدير Excel</span>
+            </button>
+          </div>
+        </div>
+
+        {/* Feedback Alert */}
+        {exportSuccessMessage && (
+          <div className="p-3 rounded-xl bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200 dark:border-emerald-800 text-emerald-800 dark:text-emerald-200 text-xs font-bold flex items-center gap-2 animate-in fade-in">
+            <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+            <span>{exportSuccessMessage}</span>
+          </div>
+        )}
+
+        {/* وتحتها: [ تحميل نموذج Excel ] */}
+        <div className="pt-2 border-t border-slate-100 dark:border-slate-800/80 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+          <button
+            type="button"
+            onClick={onDownloadTemplate}
+            className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-600 dark:text-slate-400 hover:text-emerald-600 dark:hover:text-emerald-400 transition cursor-pointer w-fit"
+            title="تحميل ملف Excel فارغ مهيأ بالأعمدة المناسبة للتعبئة"
+          >
+            <FileDown className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
+            <span className="underline decoration-emerald-500/40 underline-offset-2">تحميل نموذج Excel</span>
+          </button>
+
+          <span className="text-[11px] text-slate-400">
+            {selectedClassIdFilter !== 'all' 
+              ? `التصدير سيشمل تلاميذ قسم: ${classes.find(c => c.id === selectedClassIdFilter)?.name || ''}`
+              : 'التصدير يشمل كافة التلاميذ المسجلين'}
+          </span>
+        </div>
       </div>
 
       {classes.length === 0 && (

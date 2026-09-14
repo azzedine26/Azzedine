@@ -42,16 +42,17 @@ export const Header: React.FC<HeaderProps> = ({
   const { isInstallable, install, isIOS } = usePWAInstall();
 
   return (
-    <header className="sticky top-0 z-30 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border-b border-slate-200 dark:border-slate-800 shadow-xs">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between gap-3">
+    <header className="sticky top-0 z-20 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border-b border-slate-200 dark:border-slate-800 shadow-xs w-full max-w-full">
+      <div className="max-w-7xl mx-auto px-2.5 sm:px-4 md:px-6 lg:px-8 h-16 flex items-center justify-between gap-2 sm:gap-3 min-w-0 w-full">
         {/* Right side: Sidebar Toggle & Brand */}
-        <div className="flex items-center gap-2.5">
+        <div className="flex items-center gap-2 sm:gap-2.5 min-w-0">
           {onToggleSidebar && (
             <button
+              id="header-hamburger-menu-btn"
               onClick={onToggleSidebar}
-              className="p-2 rounded-xl text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 transition active:scale-95"
-              title="تبديل القائمة الجانبية"
-              aria-label="تبديل القائمة الجانبية"
+              className="p-2 rounded-xl text-slate-700 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 transition active:scale-95 shrink-0 focus:outline-none focus:ring-2 focus:ring-emerald-500/50"
+              title="القائمة الرئيسية"
+              aria-label="القائمة الرئيسية"
             >
               <Menu className="w-5 h-5" />
             </button>
@@ -60,21 +61,21 @@ export const Header: React.FC<HeaderProps> = ({
           {/* Logo & Brand */}
           <div 
             onClick={() => onTabChange('dashboard')}
-            className="flex items-center gap-2.5 cursor-pointer select-none group"
+            className="flex items-center gap-2 sm:gap-2.5 cursor-pointer select-none group min-w-0"
           >
-            <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-emerald-600 to-emerald-800 flex items-center justify-center text-white shadow-md shadow-emerald-700/20 group-hover:scale-105 transition-transform">
+            <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-emerald-600 to-emerald-800 flex items-center justify-center text-white shadow-md shadow-emerald-700/20 group-hover:scale-105 transition-transform shrink-0">
               <BookOpen className="w-4.5 h-4.5 text-emerald-100" />
             </div>
-            <div>
+            <div className="min-w-0">
               <div className="flex items-center gap-1.5">
-                <span className="font-extrabold text-base sm:text-lg text-slate-900 dark:text-white tracking-tight">
+                <span className="font-extrabold text-sm sm:text-lg text-slate-900 dark:text-white tracking-tight truncate">
                   أستاذ ديزاد
                 </span>
-                <span className="text-[9px] font-bold px-1.5 py-0.2 rounded-full bg-emerald-100 dark:bg-emerald-950/80 text-emerald-800 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800">
+                <span className="text-[9px] font-bold px-1.5 py-0.2 rounded-full bg-emerald-100 dark:bg-emerald-950/80 text-emerald-800 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800 shrink-0">
                   DZ
                 </span>
               </div>
-              <p className="text-[11px] text-slate-500 dark:text-slate-400 hidden sm:block">
+              <p className="text-[11px] text-slate-500 dark:text-slate-400 hidden sm:block truncate">
                 {profile.fullName ? `${profile.fullName} • ` : ''}
                 {profile.stage === 'primary' ? 'ابتدائي • ' : profile.stage === 'middle' ? 'متوسط • ' : profile.stage === 'secondary' ? 'ثانوي • ' : ''}
                 {profile.schoolName || 'المنظومة التربوية الجزائرية'}
@@ -84,7 +85,7 @@ export const Header: React.FC<HeaderProps> = ({
         </div>
 
         {/* Center: Current Tab Badge / Breadcrumb */}
-        <div className="hidden md:flex items-center gap-2 px-3 py-1.5 rounded-xl bg-slate-100/80 dark:bg-slate-800/60 border border-slate-200/80 dark:border-slate-700/60 text-xs font-semibold text-slate-700 dark:text-slate-300">
+        <div className="hidden md:flex items-center gap-2 px-3 py-1.5 rounded-xl bg-slate-100/80 dark:bg-slate-800/60 border border-slate-200/80 dark:border-slate-700/60 text-xs font-semibold text-slate-700 dark:text-slate-300 shrink-0">
           <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
           <span>{TAB_TITLES[currentTab] || 'الرئيسية'}</span>
           {profile.academicYear && (
@@ -96,7 +97,7 @@ export const Header: React.FC<HeaderProps> = ({
         </div>
 
         {/* Left side: Action buttons (PWA Install, Theme Toggle, Splash re-open) */}
-        <div className="flex items-center gap-1.5 sm:gap-2">
+        <div className="flex items-center gap-1 sm:gap-2 shrink-0">
           {/* PWA Install Button */}
           {isInstallable && (
             <button

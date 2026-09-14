@@ -16,7 +16,9 @@ import {
   ArrowLeft,
   Mail,
   SlidersHorizontal,
-  Download
+  Download,
+  Loader2,
+  FileDown
 } from 'lucide-react';
 import { 
   ClassItem, 
@@ -34,6 +36,13 @@ import {
   TRIMESTER_INFO, 
   normalizeTo20 
 } from '../../utils/gradeCalculations';
+import { 
+  exportStudentReportCardDocx, 
+  exportGradesSheetDocx, 
+  exportAttendanceSheetDocx, 
+  exportAbsenceNoticeDocx 
+} from '../../utils/docxService';
+import { exportElementToPdf } from '../../utils/pdfService';
 
 interface ReportsViewProps {
   classes: ClassItem[];
@@ -308,6 +317,108 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
     window.print();
   };
 
+  // PDF & Word export states
+  const [isExportingPdf, setIsExportingPdf] = useState(false);
+  const [isExportingWord, setIsExportingWord] = useState(false);
+  const [exportSuccessMessage, setExportSuccessMessage] = useState<string | null>(null);
+
+  // PDF export handler
+  const handleExportPdf = async () => {
+    if (isExportingPdf) return;
+    setIsExportingPdf(true);
+    try {
+      let filename = 'OstadDZ_Taqrir';
+      let orientation: 'portrait' | 'landscape' = 'portrait';
+      if (reportType === 'student_card' && activeStudent) {
+        filename = `OstadDZ_Kashf_Tilmidh_${activeStudent.lastName}_${activeStudent.firstName}_${selectedTrimester}`;
+      } else if (reportType === 'class_grades' && activeClass) {
+        filename = `OstadDZ_Kashf_Noqat_${activeClass.name}_${selectedTrimester}`;
+        orientation = 'landscape';
+      } else if (reportType === 'class_attendance' && activeClass) {
+        filename = `OstadDZ_Kashf_Ghiyab_${activeClass.name}`;
+      } else if (reportType === 'absence_notice' && activeStudent) {
+        filename = `OstadDZ_Istid3aa_Wali_${activeStudent.lastName}_${activeStudent.firstName}`;
+      }
+      await exportElementToPdf('printable-report-container', filename, { orientation });
+      setExportSuccessMessage('تم تصدير ملف PDF بنجاح وحفظه في جهازك');
+      setTimeout(() => setExportSuccessMessage(null), 4000);
+    } catch (err) {
+      console.error('Failed to export PDF:', err);
+      window.print();
+    } finally {
+      setIsExportingPdf(false);
+    }
+  };
+
+  // Word (.docx) export handler
+  const handleExportWord = async () => {
+    if (isExportingWord) return;
+    setIsExportingWord(true);
+    try {
+      if (reportType === 'student_card') {
+        if (!activeStudent || !activeClass) return;
+        const studentStats = activeStudentAttendance ? {
+          totalSessions: computedAttendance.totalSessions,
+          daysPresent: activeStudentAttendance.daysPresent,
+          daysAbsent: activeStudentAttendance.daysAbsent,
+          daysExcused: activeStudentAttendance.daysExcused,
+          daysLate: activeStudentAttendance.daysLate,
+          rate: activeStudentAttendance.rate,
+        } : null;
+
+        await exportStudentReportCardDocx(
+          activeStudent,
+          activeClass,
+          classAssessments,
+          studentStats,
+          profile,
+          selectedTrimester,
+          customRemark,
+          activeSubjectSetting
+        );
+      } else if (reportType === 'class_grades') {
+        if (!activeClass) return;
+        await exportGradesSheetDocx(
+          activeClass,
+          classAssessments,
+          classStudents,
+          selectedTrimester,
+          profile,
+          activeSubjectSetting
+        );
+      } else if (reportType === 'class_attendance') {
+        if (!activeClass) return;
+        const latestDate = classAttendance[classAttendance.length - 1]?.date || new Date().toISOString().split('T')[0];
+        await exportAttendanceSheetDocx(
+          activeClass,
+          latestDate,
+          classStudents,
+          attendanceRecords,
+          profile
+        );
+      } else if (reportType === 'absence_notice') {
+        if (!activeStudent || !activeClass) return;
+        const studentAbsenceCount = activeStudentAttendance?.daysAbsent || 0;
+        const lastAbsenceRecord = classAttendance.slice().reverse().find(rec => rec.records?.[activeStudent.id]?.status === 'absent');
+        const lastAbsenceDate = lastAbsenceRecord?.date || new Date().toISOString().split('T')[0];
+
+        await exportAbsenceNoticeDocx(
+          activeStudent,
+          activeClass,
+          studentAbsenceCount,
+          lastAbsenceDate,
+          profile
+        );
+      }
+      setExportSuccessMessage('تم إنشاء وتنزيل ملف Word (.docx) بنجاح');
+      setTimeout(() => setExportSuccessMessage(null), 4000);
+    } catch (err) {
+      console.error('Failed to export Word document:', err);
+    } finally {
+      setIsExportingWord(false);
+    }
+  };
+
   // Nav student handlers
   const handlePrevStudent = () => {
     if (currentStudentIndex > 0) {
@@ -372,16 +483,66 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center flex-wrap gap-2">
+            {/* Export PDF Button */}
+            <button
+              onClick={handleExportPdf}
+              disabled={isExportingPdf}
+              className="px-4 py-2.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-700 hover:from-emerald-700 hover:to-teal-800 disabled:opacity-50 text-white font-bold text-xs sm:text-sm shadow-md shadow-emerald-700/20 flex items-center justify-center gap-2 transition transform active:scale-95 cursor-pointer"
+              title="تصدير المستند كملف PDF عالي الدقة جاهز للطباعة"
+            >
+              {isExportingPdf ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  <span>جاري تجهيز PDF...</span>
+                </>
+              ) : (
+                <>
+                  <FileDown className="w-4 h-4" />
+                  <span>تصدير PDF</span>
+                </>
+              )}
+            </button>
+
+            {/* Export Word (.docx) Button */}
+            <button
+              onClick={handleExportWord}
+              disabled={isExportingWord}
+              className="px-4 py-2.5 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-700 hover:from-blue-700 hover:to-indigo-800 disabled:opacity-50 text-white font-bold text-xs sm:text-sm shadow-md shadow-blue-700/20 flex items-center justify-center gap-2 transition transform active:scale-95 cursor-pointer"
+              title="تصدير المستند كملف Word (.docx) قابل للتعديل"
+            >
+              {isExportingWord ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  <span>جاري تجهيز Word...</span>
+                </>
+              ) : (
+                <>
+                  <FileText className="w-4 h-4" />
+                  <span>تصدير Word (.docx)</span>
+                </>
+              )}
+            </button>
+
+            {/* Print Button */}
             <button
               onClick={handlePrint}
-              className="w-full sm:w-auto px-5 py-2.5 rounded-xl bg-gradient-to-r from-emerald-600 to-emerald-700 hover:from-emerald-700 hover:to-emerald-800 text-white font-bold text-sm shadow-md shadow-emerald-700/20 flex items-center justify-center gap-2 transition transform active:scale-95 cursor-pointer"
+              className="px-3.5 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 font-bold text-xs sm:text-sm shadow-xs flex items-center justify-center gap-1.5 transition transform active:scale-95 cursor-pointer"
+              title="الطباعة المباشرة عبر المتصفح"
             >
-              <Printer className="w-4 h-4" />
-              <span>طباعة التقرير / حفظ PDF</span>
+              <Printer className="w-4 h-4 text-slate-500" />
+              <span className="hidden sm:inline">طباعة سريعة</span>
             </button>
           </div>
         </div>
+
+        {/* Success Alert Banner */}
+        {exportSuccessMessage && (
+          <div className="p-3.5 rounded-2xl bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200 dark:border-emerald-800 text-emerald-800 dark:text-emerald-200 text-xs sm:text-sm font-bold flex items-center gap-2 animate-in fade-in slide-in-from-top-2">
+            <CheckCircle2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
+            <span>{exportSuccessMessage}</span>
+          </div>
+        )}
 
         {/* Report Type Selector Tabs */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 bg-slate-100 dark:bg-slate-800/80 p-1.5 rounded-2xl border border-slate-200 dark:border-slate-700/60">
@@ -613,7 +774,10 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
       </div>
 
       {/* 2. The Printable Document Container */}
-      <div className="printable-card bg-white text-slate-900 p-6 sm:p-10 rounded-3xl border border-slate-200 shadow-md font-sans print:shadow-none print:border-none print:p-0">
+      <div 
+        id="printable-report-container"
+        className="printable-card bg-white text-slate-900 p-6 sm:p-10 rounded-3xl border border-slate-200 shadow-md font-sans print:shadow-none print:border-none print:p-0"
+      >
         {/* Official Algerian Ministry Header */}
         {showOfficialHeader && (
           <div className="border-b-2 border-slate-800 pb-5 mb-6 text-center">

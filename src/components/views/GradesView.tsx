@@ -22,7 +22,10 @@ import {
   ListOrdered,
   HelpCircle,
   Sliders,
-  X
+  X,
+  FileDown,
+  Loader2,
+  FileText
 } from 'lucide-react';
 import { 
   AssessmentItem, 
@@ -45,6 +48,8 @@ import {
 } from '../../utils/gradeCalculations';
 import { StudentSubjectBreakdownModal } from '../modals/StudentSubjectBreakdownModal';
 import { getSubjectsForGradeAndStage } from '../../data/algerianData';
+import { exportGradesSheetDocx } from '../../utils/docxService';
+import { exportElementToPdf, exportGradesSheetPdf } from '../../utils/pdfService';
 
 interface GradesViewProps {
   assessments: AssessmentItem[];
@@ -86,6 +91,62 @@ export const GradesView: React.FC<GradesViewProps> = ({
   const [formula, setFormula] = useState<CalculationFormula>('subject_method');
   const [isFormulaHelpOpen, setIsFormulaHelpOpen] = useState<boolean>(false);
   const [isPrintPreviewOpen, setIsPrintPreviewOpen] = useState<boolean>(false);
+
+  // PDF & Word export states
+  const [isExportingPdf, setIsExportingPdf] = useState<boolean>(false);
+  const [isExportingWord, setIsExportingWord] = useState<boolean>(false);
+  const [exportSuccessMessage, setExportSuccessMessage] = useState<string | null>(null);
+
+  // PDF Export Handler
+  const handleExportGradesPdf = async () => {
+    if (!activeClass || isExportingPdf) return;
+    setIsExportingPdf(true);
+    try {
+      const filename = `OstadDZ_Kashf_Noqat_${activeClass.name}_${selectedTrimester}`;
+      const printableEl = document.getElementById('printable-deliberation-sheet');
+      if (printableEl) {
+        await exportElementToPdf(printableEl, filename, { orientation: 'landscape' });
+      } else {
+        await exportGradesSheetPdf(
+          activeClass,
+          assessments,
+          classStudents,
+          selectedTrimester,
+          profile,
+          currentSubjectSetting || undefined
+        );
+      }
+      setExportSuccessMessage('تم تصدير كشف النقاط كملف PDF بنجاح');
+      setTimeout(() => setExportSuccessMessage(null), 4000);
+    } catch (err) {
+      console.error('Failed to export PDF:', err);
+      window.print();
+    } finally {
+      setIsExportingPdf(false);
+    }
+  };
+
+  // Word (.docx) Export Handler
+  const handleExportGradesWord = async () => {
+    if (!activeClass || isExportingWord) return;
+    setIsExportingWord(true);
+    try {
+      await exportGradesSheetDocx(
+        activeClass,
+        assessments,
+        classStudents,
+        selectedTrimester,
+        profile,
+        currentSubjectSetting || undefined
+      );
+      setExportSuccessMessage('تم تصدير كشف النقاط كملف Word (.docx) قابل للتعديل بنجاح');
+      setTimeout(() => setExportSuccessMessage(null), 4000);
+    } catch (err) {
+      console.error('Failed to export Word document:', err);
+    } finally {
+      setIsExportingWord(false);
+    }
+  };
 
   // Breakdown modal state
   const [breakdownModalData, setBreakdownModalData] = useState<{
@@ -230,14 +291,44 @@ export const GradesView: React.FC<GradesViewProps> = ({
         </div>
 
         <div className="flex items-center flex-wrap gap-2.5">
+          {/* Export PDF Button */}
+          <button
+            onClick={handleExportGradesPdf}
+            disabled={isExportingPdf || !activeClass}
+            className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800 hover:bg-emerald-100 dark:hover:bg-emerald-900/60 disabled:opacity-50 text-xs sm:text-sm font-bold transition shadow-xs cursor-pointer active:scale-95"
+            title="تصدير كشف النقاط والمداولات كملف PDF"
+          >
+            {isExportingPdf ? (
+              <Loader2 className="w-4 h-4 animate-spin text-emerald-600" />
+            ) : (
+              <FileDown className="w-4 h-4 text-emerald-600" />
+            )}
+            <span>تصدير PDF</span>
+          </button>
+
+          {/* Export Word Button */}
+          <button
+            onClick={handleExportGradesWord}
+            disabled={isExportingWord || !activeClass}
+            className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 border border-blue-300 dark:border-blue-800 hover:bg-blue-100 dark:hover:bg-blue-900/60 disabled:opacity-50 text-xs sm:text-sm font-bold transition shadow-xs cursor-pointer active:scale-95"
+            title="تصدير كشف النقاط والمداولات كملف Word (.docx) قابل للتعديل"
+          >
+            {isExportingWord ? (
+              <Loader2 className="w-4 h-4 animate-spin text-blue-600" />
+            ) : (
+              <FileText className="w-4 h-4 text-blue-600" />
+            )}
+            <span>تصدير Word</span>
+          </button>
+
           {/* Printable Sheet Button */}
           <button
             onClick={() => setIsPrintPreviewOpen(true)}
             className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 text-xs sm:text-sm font-bold hover:bg-slate-50 dark:hover:bg-slate-700/60 transition shadow-xs"
-            title="طباعة كشف نقاط القسم ومحضر المداولة"
+            title="معاينة وطباعة كشف نقاط القسم ومحضر المداولة"
           >
             <Printer className="w-4 h-4 text-slate-500" />
-            <span>كشف النقاط (طباعة)</span>
+            <span>كشف النقاط (معاينة)</span>
           </button>
 
           {/* Add Assessment Button */}
@@ -1140,21 +1231,66 @@ export const GradesView: React.FC<GradesViewProps> = ({
       {/* 7. Official Printable Deliberation / Grade Sheet Modal */}
       {isPrintPreviewOpen && (
         <div className="fixed inset-0 z-[100] bg-slate-900/80 backdrop-blur-xs flex items-center justify-center p-2 sm:p-4 overflow-y-auto">
-          <div className="bg-white text-slate-900 rounded-2xl max-w-4xl w-full p-6 sm:p-8 shadow-2xl my-4 print:p-0 print:shadow-none print:w-full">
+          <div 
+            id="printable-deliberation-sheet"
+            className="bg-white text-slate-900 rounded-2xl max-w-4xl w-full p-6 sm:p-8 shadow-2xl my-4 print:p-0 print:shadow-none print:w-full"
+          >
             {/* Action buttons (hidden when printing) */}
             <div className="flex items-center justify-between pb-4 mb-6 border-b border-slate-200 print:hidden">
               <div className="flex items-center gap-2 font-bold text-sm text-slate-800">
                 <Printer className="w-5 h-5 text-emerald-600" />
-                <span>معاينة محضر النقاط الرسمي القابل للطباعة</span>
+                <span>محضر النقاط والمداولات الرسمي (جاهز للتصدير والطباعة)</span>
               </div>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center flex-wrap gap-2">
+                {/* Export PDF */}
+                <button
+                  onClick={handleExportGradesPdf}
+                  disabled={isExportingPdf}
+                  className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white text-xs font-bold shadow-xs transition active:scale-95 cursor-pointer"
+                  title="تصدير محضر النقاط إلى ملف PDF حقيقي"
+                >
+                  {isExportingPdf ? (
+                    <>
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      <span>جاري التجهيز...</span>
+                    </>
+                  ) : (
+                    <>
+                      <FileDown className="w-3.5 h-3.5" />
+                      <span>تصدير PDF</span>
+                    </>
+                  )}
+                </button>
+
+                {/* Export Word */}
+                <button
+                  onClick={handleExportGradesWord}
+                  disabled={isExportingWord}
+                  className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white text-xs font-bold shadow-xs transition active:scale-95 cursor-pointer"
+                  title="تصدير محضر النقاط إلى ملف Word (.docx) قابل للتعديل"
+                >
+                  {isExportingWord ? (
+                    <>
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      <span>جاري التجهيز...</span>
+                    </>
+                  ) : (
+                    <>
+                      <FileText className="w-3.5 h-3.5" />
+                      <span>تصدير Word</span>
+                    </>
+                  )}
+                </button>
+
+                {/* Direct Print */}
                 <button
                   onClick={() => window.print()}
-                  className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold shadow-xs transition"
+                  className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl border border-slate-300 bg-slate-50 hover:bg-slate-100 text-slate-700 text-xs font-bold shadow-xs transition"
                 >
-                  <Printer className="w-4 h-4" />
-                  <span>طباعة الآن (Print / PDF)</span>
+                  <Printer className="w-3.5 h-3.5 text-slate-500" />
+                  <span>طباعة سريعة</span>
                 </button>
+
                 <button
                   onClick={() => setIsPrintPreviewOpen(false)}
                   className="p-2 rounded-xl text-slate-400 hover:text-slate-600"
@@ -1163,6 +1299,14 @@ export const GradesView: React.FC<GradesViewProps> = ({
                 </button>
               </div>
             </div>
+
+            {/* Notification message inside modal */}
+            {exportSuccessMessage && (
+              <div className="mb-4 p-3 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-bold flex items-center gap-2 print:hidden animate-in fade-in">
+                <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                <span>{exportSuccessMessage}</span>
+              </div>
+            )}
 
             {/* Official Algerian School Header */}
             <div className="text-center space-y-1 mb-6 border-b-2 border-slate-900 pb-4">

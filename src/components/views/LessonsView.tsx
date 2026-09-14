@@ -3,13 +3,14 @@ import {
   Plus, Search, Filter, BookOpen, Calendar, Clock, Layers, 
   Trash2, Edit, Eye, GraduationCap, Sparkles, CheckCircle2, ChevronRight, X
 } from 'lucide-react';
-import { LessonPlan, ClassItem } from '../../types';
+import { LessonPlan, ClassItem, TeacherProfile } from '../../types';
 import { LessonDetailModal } from '../modals/LessonDetailModal';
 import { getSubjectsForGradeAndStage } from '../../data/algerianData';
 
 interface LessonsViewProps {
   lessons: LessonPlan[];
   classes: ClassItem[];
+  profile?: TeacherProfile;
   onOpenAddLesson: (defaultClassId?: string) => void;
   onEditLesson: (lesson: LessonPlan) => void;
   onDeleteLesson: (lessonId: string, lessonTitle: string) => void;
@@ -19,6 +20,7 @@ interface LessonsViewProps {
 export function LessonsView({
   lessons,
   classes,
+  profile,
   onOpenAddLesson,
   onEditLesson,
   onDeleteLesson,
@@ -435,6 +437,7 @@ export function LessonsView({
           onDeleteLesson(lessonId, lessonTitle);
         }}
         classes={classes}
+        profile={profile}
       />
     </div>
   );

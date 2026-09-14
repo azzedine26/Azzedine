@@ -84,50 +84,50 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   const recentAssessments = [...assessments].slice(0, 3);
 
   return (
-    <div className="space-y-6 pb-12">
+    <div className="space-y-6 pb-12 w-full max-w-full min-w-0">
       {/* Welcome & Teacher Header */}
-      <div className="bg-gradient-to-r from-emerald-700 via-emerald-800 to-slate-900 rounded-3xl p-6 sm:p-8 text-white shadow-xl shadow-emerald-900/10 relative overflow-hidden">
+      <div className="bg-gradient-to-r from-emerald-700 via-emerald-800 to-slate-900 rounded-3xl p-4 sm:p-6 md:p-8 text-white shadow-xl shadow-emerald-900/10 relative overflow-hidden">
         {/* Subtle background decorative shapes */}
         <div className="absolute top-0 left-0 w-72 h-72 bg-white/5 rounded-full blur-3xl -translate-x-20 -translate-y-20 pointer-events-none" />
         <div className="absolute bottom-0 right-0 w-60 h-60 bg-emerald-500/10 rounded-full blur-2xl translate-x-10 translate-y-10 pointer-events-none" />
 
-        <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
-          <div className="space-y-2">
-            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/10 backdrop-blur-md text-emerald-200 text-xs font-semibold">
-              <Calendar className="w-3.5 h-3.5" />
-              <span>{todayArabic}</span>
+        <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6 min-w-0">
+          <div className="space-y-2 min-w-0">
+            <div className="inline-flex flex-wrap items-center gap-2 px-3 py-1 rounded-full bg-white/10 backdrop-blur-md text-emerald-200 text-xs font-semibold max-w-full">
+              <Calendar className="w-3.5 h-3.5 shrink-0" />
+              <span className="truncate">{todayArabic}</span>
               <span className="opacity-50">•</span>
-              <span>الموسم: {profile.academicYear || '2024 - 2025'}</span>
+              <span className="truncate">الموسم: {profile.academicYear || '2024 - 2025'}</span>
             </div>
 
-            <h2 className="text-2xl sm:text-3xl font-black tracking-tight">
+            <h2 className="text-xl sm:text-2xl md:text-3xl font-black tracking-tight truncate">
               أهلاً بك، {profile.fullName || 'أستاذنا الفاضل'}
             </h2>
 
-            <div className="flex flex-wrap items-center gap-3 text-xs sm:text-sm text-emerald-100/90 pt-1">
+            <div className="flex flex-wrap items-center gap-2.5 sm:gap-3 text-xs sm:text-sm text-emerald-100/90 pt-1">
               <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-white/15 backdrop-blur-xs text-white font-bold text-xs border border-white/20">
-                <GraduationCap className="w-3.5 h-3.5 text-amber-300" />
+                <GraduationCap className="w-3.5 h-3.5 text-amber-300 shrink-0" />
                 <span>
                   {profile.stage === 'middle' ? 'التعليم المتوسط' : 'التعليم الثانوي'}
                 </span>
               </div>
               <div className="flex items-center gap-1.5">
-                <School className="w-4 h-4 text-emerald-300" />
-                <span>{profile.schoolName || 'المؤسسة التربوية'}</span>
+                <School className="w-4 h-4 text-emerald-300 shrink-0" />
+                <span className="truncate">{profile.schoolName || 'المؤسسة التربوية'}</span>
               </div>
               <div className="flex items-center gap-1.5">
-                <MapPin className="w-4 h-4 text-emerald-300" />
+                <MapPin className="w-4 h-4 text-emerald-300 shrink-0" />
                 <span>{profile.wilaya || 'الجزائر'}</span>
               </div>
               <div className="flex items-center gap-1.5">
-                <Sparkles className="w-4 h-4 text-amber-300" />
-                <span>مادة التدريس: {profile.subject || 'الرياضيات'}</span>
+                <Sparkles className="w-4 h-4 text-amber-300 shrink-0" />
+                <span className="truncate">مادة التدريس: {profile.subject || 'الرياضيات'}</span>
               </div>
             </div>
           </div>
 
           {/* Quick Action Buttons on Banner */}
-          <div className="flex flex-wrap items-center gap-2.5">
+          <div className="flex flex-wrap items-center gap-2 sm:gap-2.5">
             <button
               onClick={onOpenAddClass}
               className="px-4 py-2.5 rounded-xl bg-white text-emerald-800 hover:bg-emerald-50 text-xs sm:text-sm font-bold shadow-md transition transform active:scale-95 flex items-center gap-2"
@@ -197,20 +197,20 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       </div>
 
       {/* Stats Cards Grid */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-7 gap-3 sm:gap-4">
+      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-7 gap-2.5 sm:gap-3.5">
         {/* Total Classes */}
         <div 
           onClick={() => onNavigateTab('classes')}
-          className="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs hover:border-emerald-500/50 transition cursor-pointer group"
+          className="bg-white dark:bg-slate-900 p-3 sm:p-4 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs hover:border-emerald-500/50 transition cursor-pointer group min-w-0"
         >
-          <div className="flex items-center justify-between mb-2.5">
-            <span className="text-xs font-bold text-slate-500 dark:text-slate-400">الأقسام</span>
-            <div className="w-8 h-8 rounded-xl bg-emerald-50 dark:bg-emerald-950/80 text-emerald-600 dark:text-emerald-400 flex items-center justify-center group-hover:scale-110 transition-transform">
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-xs font-bold text-slate-500 dark:text-slate-400 truncate">الأقسام</span>
+            <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-xl bg-emerald-50 dark:bg-emerald-950/80 text-emerald-600 dark:text-emerald-400 flex items-center justify-center group-hover:scale-110 transition-transform shrink-0">
               <GraduationCap className="w-4 h-4" />
             </div>
           </div>
           <div className="flex items-baseline gap-1.5">
-            <span className="text-2xl font-black text-slate-900 dark:text-white">
+            <span className="text-xl sm:text-2xl font-black text-slate-900 dark:text-white">
               {totalClasses}
             </span>
             <span className="text-xs text-slate-400 font-medium">قسم</span>
@@ -220,19 +220,19 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         {/* Total Students */}
         <div 
           onClick={() => onNavigateTab('students')}
-          className="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs hover:border-sky-500/50 transition cursor-pointer group"
+          className="bg-white dark:bg-slate-900 p-3 sm:p-4 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs hover:border-sky-500/50 transition cursor-pointer group min-w-0"
         >
-          <div className="flex items-center justify-between mb-2.5">
-            <span className="text-xs font-bold text-slate-500 dark:text-slate-400">الطلاب</span>
-            <div className="w-8 h-8 rounded-xl bg-sky-50 dark:bg-sky-950/80 text-sky-600 dark:text-sky-400 flex items-center justify-center group-hover:scale-110 transition-transform">
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-xs font-bold text-slate-500 dark:text-slate-400 truncate">الطلاب</span>
+            <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-xl bg-sky-50 dark:bg-sky-950/80 text-sky-600 dark:text-sky-400 flex items-center justify-center group-hover:scale-110 transition-transform shrink-0">
               <Users className="w-4 h-4" />
             </div>
           </div>
           <div className="flex items-baseline gap-1.5">
-            <span className="text-2xl font-black text-slate-900 dark:text-white">
+            <span className="text-xl sm:text-2xl font-black text-slate-900 dark:text-white">
               {totalStudents}
             </span>
-            <span className="text-[11px] text-slate-400 font-medium truncate">
+            <span className="text-[10px] sm:text-[11px] text-slate-400 font-medium truncate">
               ({maleStudents}ذ/{femaleStudents}ث)
             </span>
           </div>
@@ -241,95 +241,95 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         {/* Total Assessments */}
         <div 
           onClick={() => onNavigateTab('grades')}
-          className="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs hover:border-amber-500/50 transition cursor-pointer group"
+          className="bg-white dark:bg-slate-900 p-3 sm:p-4 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs hover:border-amber-500/50 transition cursor-pointer group min-w-0"
         >
-          <div className="flex items-center justify-between mb-2.5">
-            <span className="text-xs font-bold text-slate-500 dark:text-slate-400">النقاط والتقييم</span>
-            <div className="w-8 h-8 rounded-xl bg-amber-50 dark:bg-amber-950/80 text-amber-600 dark:text-amber-400 flex items-center justify-center group-hover:scale-110 transition-transform">
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-xs font-bold text-slate-500 dark:text-slate-400 truncate">النقاط والتقييم</span>
+            <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-xl bg-amber-50 dark:bg-amber-950/80 text-amber-600 dark:text-amber-400 flex items-center justify-center group-hover:scale-110 transition-transform shrink-0">
               <Award className="w-4 h-4" />
             </div>
           </div>
           <div className="flex items-baseline gap-1.5">
-            <span className="text-2xl font-black text-slate-900 dark:text-white">
+            <span className="text-xl sm:text-2xl font-black text-slate-900 dark:text-white">
               {totalAssessments}
             </span>
-            <span className="text-xs text-slate-400 font-medium">تقييم مسجل</span>
+            <span className="text-xs text-slate-400 font-medium truncate">تقييم</span>
           </div>
         </div>
 
         {/* Total Lessons Prepared */}
         <div 
           onClick={() => onNavigateTab('lessons')}
-          className="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs hover:border-teal-500/50 transition cursor-pointer group"
+          className="bg-white dark:bg-slate-900 p-3 sm:p-4 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs hover:border-teal-500/50 transition cursor-pointer group min-w-0"
         >
-          <div className="flex items-center justify-between mb-2.5">
-            <span className="text-xs font-bold text-slate-500 dark:text-slate-400">تحضير الدروس</span>
-            <div className="w-8 h-8 rounded-xl bg-teal-50 dark:bg-teal-950/80 text-teal-600 dark:text-teal-400 flex items-center justify-center group-hover:scale-110 transition-transform">
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-xs font-bold text-slate-500 dark:text-slate-400 truncate">تحضير الدروس</span>
+            <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-xl bg-teal-50 dark:bg-teal-950/80 text-teal-600 dark:text-teal-400 flex items-center justify-center group-hover:scale-110 transition-transform shrink-0">
               <BookOpen className="w-4 h-4" />
             </div>
           </div>
           <div className="flex items-baseline gap-1.5">
-            <span className="text-2xl font-black text-slate-900 dark:text-white">
+            <span className="text-xl sm:text-2xl font-black text-slate-900 dark:text-white">
               {totalLessons}
             </span>
-            <span className="text-xs text-slate-400 font-medium">مذكرة</span>
+            <span className="text-xs text-slate-400 font-medium truncate">مذكرة</span>
           </div>
         </div>
 
         {/* Weekly Schedule Sessions */}
         <div 
           onClick={() => onNavigateTab('schedule')}
-          className="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs hover:border-emerald-500/50 transition cursor-pointer group"
+          className="bg-white dark:bg-slate-900 p-3 sm:p-4 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs hover:border-emerald-500/50 transition cursor-pointer group min-w-0"
         >
-          <div className="flex items-center justify-between mb-2.5">
-            <span className="text-xs font-bold text-slate-500 dark:text-slate-400">الجدول الأسبوعي</span>
-            <div className="w-8 h-8 rounded-xl bg-emerald-50 dark:bg-emerald-950/80 text-emerald-600 dark:text-emerald-400 flex items-center justify-center group-hover:scale-110 transition-transform">
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-xs font-bold text-slate-500 dark:text-slate-400 truncate">الجدول الأسبوعي</span>
+            <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-xl bg-emerald-50 dark:bg-emerald-950/80 text-emerald-600 dark:text-emerald-400 flex items-center justify-center group-hover:scale-110 transition-transform shrink-0">
               <Calendar className="w-4 h-4" />
             </div>
           </div>
           <div className="flex items-baseline gap-1.5">
-            <span className="text-2xl font-black text-slate-900 dark:text-white">
+            <span className="text-xl sm:text-2xl font-black text-slate-900 dark:text-white">
               {totalSessions}
             </span>
-            <span className="text-xs text-slate-400 font-medium">حصة/أسبوع</span>
+            <span className="text-xs text-slate-400 font-medium truncate">حصة/أسبوع</span>
           </div>
         </div>
 
         {/* Attendance Sessions */}
         <div 
           onClick={() => onNavigateTab('attendance')}
-          className="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs hover:border-emerald-500/50 transition cursor-pointer group"
+          className="bg-white dark:bg-slate-900 p-3 sm:p-4 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs hover:border-emerald-500/50 transition cursor-pointer group min-w-0"
         >
-          <div className="flex items-center justify-between mb-2.5">
-            <span className="text-xs font-bold text-slate-500 dark:text-slate-400">الغياب والحضور</span>
-            <div className="w-8 h-8 rounded-xl bg-emerald-50 dark:bg-emerald-950/80 text-emerald-600 dark:text-emerald-400 flex items-center justify-center group-hover:scale-110 transition-transform">
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-xs font-bold text-slate-500 dark:text-slate-400 truncate">الغياب والحضور</span>
+            <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-xl bg-emerald-50 dark:bg-emerald-950/80 text-emerald-600 dark:text-emerald-400 flex items-center justify-center group-hover:scale-110 transition-transform shrink-0">
               <UserCheck className="w-4 h-4" />
             </div>
           </div>
           <div className="flex items-baseline gap-1.5">
-            <span className="text-2xl font-black text-slate-900 dark:text-white">
+            <span className="text-xl sm:text-2xl font-black text-slate-900 dark:text-white">
               {attendanceRecords.length}
             </span>
-            <span className="text-xs text-slate-400 font-medium">جلسة رصد</span>
+            <span className="text-xs text-slate-400 font-medium truncate">جلسة</span>
           </div>
         </div>
 
         {/* Total Library Items */}
         <div 
           onClick={() => onNavigateTab('library')}
-          className="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs hover:border-emerald-500/50 transition cursor-pointer group"
+          className="bg-white dark:bg-slate-900 p-3 sm:p-4 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs hover:border-emerald-500/50 transition cursor-pointer group min-w-0"
         >
-          <div className="flex items-center justify-between mb-2.5">
-            <span className="text-xs font-bold text-slate-500 dark:text-slate-400">المكتبة والملفات</span>
-            <div className="w-8 h-8 rounded-xl bg-emerald-50 dark:bg-emerald-950/80 text-emerald-600 dark:text-emerald-400 flex items-center justify-center group-hover:scale-110 transition-transform">
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-xs font-bold text-slate-500 dark:text-slate-400 truncate">المكتبة والملفات</span>
+            <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-xl bg-emerald-50 dark:bg-emerald-950/80 text-emerald-600 dark:text-emerald-400 flex items-center justify-center group-hover:scale-110 transition-transform shrink-0">
               <Folder className="w-4 h-4" />
             </div>
           </div>
           <div className="flex items-baseline gap-1.5">
-            <span className="text-2xl font-black text-slate-900 dark:text-white">
+            <span className="text-xl sm:text-2xl font-black text-slate-900 dark:text-white">
               {libraryItems.length}
             </span>
-            <span className="text-xs text-slate-400 font-medium">عنصر</span>
+            <span className="text-xs text-slate-400 font-medium truncate">عنصر</span>
           </div>
         </div>
       </div>

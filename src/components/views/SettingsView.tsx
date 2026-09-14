@@ -144,13 +144,15 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
 
   const handleProfileSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    const cleanSubject = subject.trim();
     await onSaveProfile({
       fullName: fullName.trim(),
       wilaya,
       schoolName: schoolName.trim(),
-      subject: subject.trim(),
+      subject: cleanSubject,
       academicYear: academicYear.trim(),
     });
+    setSpecializedSubject(cleanSubject);
     setProfileSavedFeedback(true);
     setTimeout(() => setProfileSavedFeedback(false), 3000);
   };
@@ -533,15 +535,18 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
 
             <div>
               <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-                مادة التخصص / التدريس
+                مادة التخصص / التدريس المركزية
               </label>
               <input
                 type="text"
                 value={subject}
                 onChange={(e) => setSubject(e.target.value)}
-                placeholder="علوم الطبيعة والحياة أو الرياضيات"
+                placeholder="المادة الرسمية (مثال: الرياضيات)"
                 className="w-full px-3.5 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-xs sm:text-sm font-medium focus:outline-hidden focus:ring-2 focus:ring-emerald-500/30 focus:border-emerald-600"
               />
+              <p className="text-[10px] text-emerald-600 dark:text-emerald-400 mt-1 font-medium">
+                المصدر المركزي لكافة نماذج التطبيق (الأقسام، الحصص، التحضير، التقييمات والمكتبة).
+              </p>
             </div>
 
             <div>

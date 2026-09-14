@@ -1,6 +1,8 @@
-import React from 'react';
-import { X, Calendar, Clock, BookOpen, GraduationCap, Layers, Wrench, Edit, Trash2, Printer, CheckCircle2 } from 'lucide-react';
-import { LessonPlan, ClassItem } from '../../types';
+import React, { useState } from 'react';
+import { X, Calendar, Clock, BookOpen, GraduationCap, Layers, Wrench, Edit, Trash2, Printer, CheckCircle2, FileDown, FileText, Loader2 } from 'lucide-react';
+import { LessonPlan, ClassItem, TeacherProfile } from '../../types';
+import { exportLessonPlanDocx } from '../../utils/docxService';
+import { exportLessonPlanPdf } from '../../utils/pdfService';
 
 interface LessonDetailModalProps {
   lesson: LessonPlan | null;
@@ -9,6 +11,7 @@ interface LessonDetailModalProps {
   onEdit: (lesson: LessonPlan) => void;
   onDelete: (lessonId: string, lessonTitle: string) => void;
   classes: ClassItem[];
+  profile?: TeacherProfile;
 }
 
 export function LessonDetailModal({
@@ -18,14 +21,51 @@ export function LessonDetailModal({
   onEdit,
   onDelete,
   classes,
+  profile,
 }: LessonDetailModalProps) {
+  const [isExportingPdf, setIsExportingPdf] = useState(false);
+  const [isExportingWord, setIsExportingWord] = useState(false);
+
   if (!isOpen || !lesson) return null;
 
   const currentClass = classes.find((c) => c.id === lesson.classId);
   const className = lesson.className || (currentClass ? currentClass.name : 'قسم غير محدد');
 
+  const fallbackProfile: TeacherProfile = profile || {
+    fullName: 'أستاذ المادة',
+    schoolName: '',
+    subject: lesson.subject || '',
+    academicYear: '2024 - 2025',
+    wilaya: '',
+  };
+
   const handlePrint = () => {
     window.print();
+  };
+
+  const handleExportPdf = async () => {
+    if (isExportingPdf) return;
+    setIsExportingPdf(true);
+    try {
+      await exportLessonPlanPdf(lesson, currentClass || null, fallbackProfile);
+    } catch (err) {
+      console.error('Failed to export lesson PDF:', err);
+      window.print();
+    } finally {
+      setIsExportingPdf(false);
+    }
+  };
+
+  const handleExportWord = async () => {
+    if (isExportingWord) return;
+    setIsExportingWord(true);
+    try {
+      await exportLessonPlanDocx(lesson, fallbackProfile);
+    } catch (err) {
+      console.error('Failed to export lesson Word docx:', err);
+    } finally {
+      setIsExportingWord(false);
+    }
   };
 
   return (
@@ -50,7 +90,7 @@ export function LessonDetailModal({
                 </span>
                 {lesson.duration && (
                   <span className="px-2.5 py-0.5 rounded-full bg-white/15 text-white/90 text-xs font-medium flex items-center gap-1">
-                    <Clock className="w-3 h-3" />
+                    <Clock className="w-3.5 h-3.5" />
                     <span>{lesson.duration}</span>
                   </span>
                 )}
@@ -67,10 +107,34 @@ export function LessonDetailModal({
             </div>
 
             <div className="flex items-center gap-1.5">
+              {/* Export PDF */}
+              <button
+                type="button"
+                onClick={handleExportPdf}
+                disabled={isExportingPdf}
+                className="px-2.5 py-1.5 rounded-xl bg-white/10 hover:bg-white/20 disabled:opacity-50 text-white transition text-xs flex items-center gap-1 cursor-pointer font-bold"
+                title="تصدير المذكرة كملف PDF"
+              >
+                {isExportingPdf ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <FileDown className="w-3.5 h-3.5" />}
+                <span className="hidden sm:inline">PDF</span>
+              </button>
+
+              {/* Export Word */}
+              <button
+                type="button"
+                onClick={handleExportWord}
+                disabled={isExportingWord}
+                className="px-2.5 py-1.5 rounded-xl bg-white/10 hover:bg-white/20 disabled:opacity-50 text-white transition text-xs flex items-center gap-1 cursor-pointer font-bold"
+                title="تصدير المذكرة كملف Word (.docx)"
+              >
+                {isExportingWord ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <FileText className="w-3.5 h-3.5" />}
+                <span className="hidden sm:inline">Word</span>
+              </button>
+
               <button
                 type="button"
                 onClick={handlePrint}
-                className="p-2 rounded-xl bg-white/10 hover:bg-white/20 text-white transition text-xs flex items-center gap-1"
+                className="p-2 rounded-xl bg-white/10 hover:bg-white/20 text-white transition text-xs flex items-center gap-1 cursor-pointer"
                 title="طباعة المذكرة"
               >
                 <Printer className="w-4 h-4" />
@@ -78,7 +142,7 @@ export function LessonDetailModal({
               <button
                 type="button"
                 onClick={onClose}
-                className="p-2 rounded-xl bg-white/10 hover:bg-white/20 text-white transition"
+                className="p-2 rounded-xl bg-white/10 hover:bg-white/20 text-white transition cursor-pointer"
               >
                 <X className="w-5 h-5" />
               </button>

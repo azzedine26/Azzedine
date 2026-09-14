@@ -67,6 +67,15 @@ export const AddLibraryItemModal: React.FC<AddLibraryItemModalProps> = ({
   const [error, setError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
 
+  // Sync subject when modal opens or defaultSubject changes
+  React.useEffect(() => {
+    if (isOpen) {
+      setSubject(defaultSubject || 'الرياضيات');
+      setFolderName(defaultFolder);
+      setClassId(defaultClassId);
+    }
+  }, [isOpen, defaultSubject, defaultFolder, defaultClassId]);
+
   // Combine default preset folders and existing teacher folders
   const allFolderOptions = Array.from(new Set([...DEFAULT_PRESET_FOLDERS, ...existingFolders]));
 
@@ -181,7 +190,7 @@ export const AddLibraryItemModal: React.FC<AddLibraryItemModalProps> = ({
           title: title.trim(),
           description: description.trim() || undefined,
           itemType: 'file',
-          subject: subject.trim(),
+          subject: (defaultSubject || subject || 'الرياضيات').trim(),
           classId: classId || undefined,
           className: matchedClass ? `${matchedClass.name} (${matchedClass.division || matchedClass.subject})` : undefined,
           folderName: finalFolder,
@@ -217,7 +226,7 @@ export const AddLibraryItemModal: React.FC<AddLibraryItemModalProps> = ({
           title: title.trim(),
           description: description.trim() || undefined,
           itemType: 'note',
-          subject: subject.trim(),
+          subject: (defaultSubject || subject || 'الرياضيات').trim(),
           classId: classId || undefined,
           className: matchedClass ? `${matchedClass.name} (${matchedClass.division || matchedClass.subject})` : undefined,
           folderName: finalFolder,
@@ -447,10 +456,10 @@ export const AddLibraryItemModal: React.FC<AddLibraryItemModalProps> = ({
               </label>
               <div className="h-10 px-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/80 dark:bg-slate-800/80 flex items-center justify-between">
                 <span className="text-xs sm:text-sm font-extrabold text-slate-900 dark:text-white">
-                  {subject || defaultSubject || 'الرياضيات'}
+                  {defaultSubject || subject || 'الرياضيات'}
                 </span>
                 <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300">
-                  تلقائي
+                  تلقائي من إعدادات الأستاذ
                 </span>
               </div>
             </div>

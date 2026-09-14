@@ -83,7 +83,7 @@ export function AddLessonModal({
       
       setTitle('');
       setClassId(initialClassId);
-      setSubject(initialClass?.subject || defaultSubject || 'الرياضيات');
+      setSubject(defaultSubject || initialClass?.subject || 'الرياضيات');
       setDate(new Date().toISOString().slice(0, 10));
       setDuration('ساعة واحدة (1 سا)');
       setObjectives('');
@@ -103,7 +103,7 @@ export function AddLessonModal({
     const targetClass = classes.find((c) => c.id === newClassId);
     if (targetClass) {
       if (!editingLesson) {
-        setSubject(targetClass.subject || defaultSubject || 'الرياضيات');
+        setSubject(defaultSubject || targetClass.subject || 'الرياضيات');
       }
       setColor(targetClass.color || '#006233');
     }
@@ -183,7 +183,7 @@ export function AddLessonModal({
       title: title.trim(),
       classId,
       className: selectedClassObj ? selectedClassObj.name : undefined,
-      subject: subject.trim(),
+      subject: (editingLesson ? (subject || defaultSubject || 'الرياضيات') : (defaultSubject || subject || 'الرياضيات')).trim(),
       date,
       duration: duration.trim(),
       objectives: objectives.trim(),
@@ -289,10 +289,10 @@ export function AddLessonModal({
               </label>
               <div className="h-10 px-3.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/80 dark:bg-slate-800/80 flex items-center justify-between">
                 <span className="text-sm font-extrabold text-slate-900 dark:text-white">
-                  {subject || defaultSubject || 'الرياضيات'}
+                  {defaultSubject || subject || 'الرياضيات'}
                 </span>
                 <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300">
-                  تلقائي
+                  تلقائي من إعدادات الأستاذ
                 </span>
               </div>
             </div>

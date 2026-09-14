@@ -57,7 +57,7 @@ export const AddAssessmentModal: React.FC<AddAssessmentModalProps> = ({
     } else {
       const foundClass = classes.find((c) => c.id === defaultClassId) || classes[0];
       const initialClassId = foundClass ? foundClass.id : '';
-      const initialSubject = foundClass?.subject || defaultSubject || 'الرياضيات';
+      const initialSubject = defaultSubject || foundClass?.subject || 'الرياضيات';
 
       setClassId(initialClassId);
       setType('test');
@@ -107,15 +107,12 @@ export const AddAssessmentModal: React.FC<AddAssessmentModalProps> = ({
     }
   };
 
-  // Sync subject when class changes if not explicitly set
+  // Sync subject when class changes
   const handleClassChange = (newClassId: string) => {
     setClassId(newClassId);
     const found = classes.find((c) => c.id === newClassId);
     if (found && !editingAssessment) {
-      const validSubjects = getSubjectsForGradeAndStage(found.stage, found.grade, [found.subject]);
-      if (!subject || !validSubjects.includes(subject)) {
-        setSubject(found.subject && validSubjects.includes(found.subject) ? found.subject : validSubjects[0] || found.subject || '');
-      }
+      setSubject(defaultSubject || found.subject || 'الرياضيات');
     }
   };
 
@@ -145,7 +142,7 @@ export const AddAssessmentModal: React.FC<AddAssessmentModalProps> = ({
       type,
       classId,
       className: selectedClassObj?.name || '',
-      subject: subject.trim(),
+      subject: (editingAssessment ? (subject || defaultSubject || 'الرياضيات') : (defaultSubject || subject || 'الرياضيات')).trim(),
       trimester,
       date,
       coefficient: Number(coefficient) || 1,
@@ -230,10 +227,10 @@ export const AddAssessmentModal: React.FC<AddAssessmentModalProps> = ({
               </label>
               <div className="h-10 px-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/80 dark:bg-slate-800/80 flex items-center justify-between">
                 <span className="text-xs sm:text-sm font-extrabold text-slate-900 dark:text-white">
-                  {subject || defaultSubject || 'الرياضيات'}
+                  {defaultSubject || subject || 'الرياضيات'}
                 </span>
                 <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300">
-                  تلقائي
+                  تلقائي من إعدادات الأستاذ
                 </span>
               </div>
             </div>
