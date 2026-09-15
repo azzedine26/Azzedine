@@ -118,15 +118,12 @@ export function LessonsView({
                 <BookOpen className="w-3.5 h-3.5" />
                 <span>المذكرات والتحضير البيداغوجي</span>
               </span>
-              <span className="px-2.5 py-0.5 rounded-full bg-black/20 text-white/90 text-xs font-semibold">
-                محلي 100% بدون إنترنت
-              </span>
             </div>
             <h1 className="text-xl sm:text-3xl font-black tracking-tight text-white">
               تحضير الدروس والمذكرات البيداغوجية
             </h1>
             <p className="text-emerald-100/80 text-xs sm:text-sm max-w-xl leading-relaxed">
-              إعداد وتدوين أهداف الدروس، مراحل سير الحصة التعليمية، الوسائل والسندات، وملاحظات الأستاذ مع حفظ فوري على ذاكرة الهاتف.
+              إعداد وتدوين أهداف الدروس، مراحل سير الحصة التعليمية، الوسائل والسندات، وملاحظات الأستاذ.
             </p>
           </div>
 
@@ -162,9 +159,9 @@ export function LessonsView({
             <span className="text-[10px] text-emerald-200/70 mr-1">من أصل {classes.length}</span>
           </div>
           <div className="bg-white/10 rounded-xl p-2.5">
-            <span className="text-[11px] text-emerald-200/90 block">قاعدة البيانات</span>
-            <span className="text-xs sm:text-sm font-black text-emerald-300">IndexedDB</span>
-            <span className="text-[10px] text-emerald-200/70 block">تخزين آمن ومحلي</span>
+            <span className="text-[11px] text-emerald-200/90 block">جاهزية المذكرات</span>
+            <span className="text-xs sm:text-sm font-black text-emerald-300">مكتملة ومتاحة</span>
+            <span className="text-[10px] text-emerald-200/70 block">للطباعة والمراجعة</span>
           </div>
         </div>
       </div>

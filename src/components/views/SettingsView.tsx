@@ -209,7 +209,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
           </h2>
         </div>
         <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-1">
-          تخصيص بيانات الأستاذ، المظهر، وإدارة النسخ الاحتياطي لقاعدة البيانات المحلية.
+          تخصيص بيانات الأستاذ، المظهر، وإدارة النسخ الاحتياطي واسترجاع السجلات.
         </p>
       </div>
 
@@ -451,7 +451,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
             {stageSavedFeedback && (
               <span className="font-bold text-emerald-600 dark:text-emerald-400 flex items-center gap-1">
                 <CheckCircle className="w-4 h-4" />
-                تم حفظ الطور والمادة بنجاح في IndexedDB!
+                تم حفظ الطور والمادة بنجاح!
               </span>
             )}
           </div>
@@ -582,16 +582,16 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
         onDeleteSubject={onDeleteSubject || (() => {})}
       />
 
-      {/* 4. IndexedDB Storage & Backup Management */}
+      {/* 4. Backup Management */}
       <div className="bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs space-y-4">
         <div className="flex items-center justify-between">
           <div>
             <h3 className="font-bold text-sm sm:text-base text-slate-900 dark:text-white flex items-center gap-2">
               <Database className="w-4 h-4 text-sky-600" />
-              النسخ الاحتياطي وقاعدة البيانات المحلية (IndexedDB)
+              النسخ الاحتياطي واسترجاع البيانات
             </h3>
             <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-              كل سجلاتك محفوظة داخل ذاكرة المتصفح/الهاتف. يمكنك تصدير نسخة احتياطية في ملف JSON واسترجاعها في أي وقت دون إنترنت.
+              يمكنك تصدير نسخة احتياطية من جميع السجلات والملفات واسترجاعها في أي وقت.
             </p>
           </div>
         </div>
@@ -607,8 +607,8 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
             <span className="text-base font-black text-slate-900 dark:text-white">{studentsCount}</span>
           </div>
           <div className="col-span-2 sm:col-span-1">
-            <span className="text-slate-400 block">نوع التخزين:</span>
-            <span className="font-bold text-emerald-600 dark:text-emerald-400">IndexedDB (محلي 100%)</span>
+            <span className="text-slate-400 block">حالة السجلات:</span>
+            <span className="font-bold text-emerald-600 dark:text-emerald-400">نشطة ومحدثة</span>
           </div>
         </div>
 
@@ -620,7 +620,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
             className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-slate-900 dark:bg-white text-white dark:text-slate-900 text-xs sm:text-sm font-bold hover:opacity-90 transition active:scale-95 shadow-xs"
           >
             <Download className="w-4 h-4" />
-            <span>تصدير نسخة احتياطية (JSON)</span>
+            <span>تصدير نسخة احتياطية</span>
           </button>
 
           <label className="flex items-center gap-2 px-4 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-200 text-xs sm:text-sm font-bold hover:bg-slate-100 dark:hover:bg-slate-700/60 transition cursor-pointer active:scale-95 shadow-xs">
@@ -647,14 +647,14 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
         </div>
       </div>
 
-      {/* 4. PWA & Capacitor Integration Info */}
+      {/* 5. App Installation */}
       <div className="bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs space-y-3">
         <h3 className="font-bold text-sm sm:text-base text-slate-900 dark:text-white flex items-center gap-2">
           <Smartphone className="w-4 h-4 text-emerald-600" />
-          تثبيت التطبيق والجاهزية لـ Android Capacitor
+          تثبيت التطبيق على الهاتف
         </h3>
         <p className="text-xs text-slate-500 dark:text-slate-400">
-          تمت برمجة هذا التطبيق بأحدث معايير الـ Progressive Web App (PWA) ليتحول لتطبيق مثبت على الهاتف بدون متجر، وهو مهيأ بالكامل للتحويل إلى APK عبر Capacitor.
+          يمكنك تثبيت تطبيق أستاذ ديزاد مباشرة على هاتفك أو حاسوبك للوصول السريع بضغطة واحدة من الشاشة الرئيسية.
         </p>
 
         <div className="pt-2 flex flex-wrap items-center gap-3">
@@ -664,14 +664,14 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
               className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-emerald-600 text-white text-xs sm:text-sm font-bold shadow-xs hover:bg-emerald-700 transition"
             >
               <Download className="w-4 h-4" />
-              <span>تثبيت Ostad DZ على هذا الجهاز</span>
+              <span>تثبيت التطبيق على هذا الجهاز</span>
             </button>
           )}
 
           {isInstalled && (
             <div className="px-3 py-1.5 rounded-xl bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 text-xs font-bold border border-emerald-300 dark:border-emerald-800 flex items-center gap-1.5">
               <CheckCircle className="w-4 h-4" />
-              <span>التطبيق مثبت ويعمل في وضع Standalone المستقل</span>
+              <span>التطبيق مثبت وجاهز للاستخدام المباشر</span>
             </div>
           )}
 
@@ -680,17 +680,6 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
               📱 <strong>للتثبيت على iPhone / iPad:</strong> اضغط على زر المشاركة (Share) في أسفل متصفح Safari، ثم اختر <strong>"إضافة إلى الشاشة الرئيسية" (Add to Home Screen)</strong>.
             </div>
           )}
-        </div>
-
-        {/* Capacitor Guide Accordion / Note */}
-        <div className="mt-3 p-3.5 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-800 text-xs text-slate-600 dark:text-slate-300 space-y-1.5">
-          <div className="flex items-center gap-2 font-bold text-slate-900 dark:text-white">
-            <Info className="w-4 h-4 text-sky-600" />
-            <span>معلومات حزمة Capacitor للأندرويد:</span>
-          </div>
-          <p className="leading-relaxed">
-            تم تجهيز ملف التكوين <code className="bg-slate-200 dark:bg-slate-700 px-1 py-0.5 rounded font-mono text-[11px]">capacitor.config.json</code> بحزمة <code className="text-emerald-600 dark:text-emerald-400 font-mono">com.ostaddz.app</code> ومجلد الإخراج <code className="font-mono">dist</code>، مما يسمح بتحويله المباشر بنقرة واحدة إلى مشروع Android Studio وتوليد ملف APK.
-          </p>
         </div>
       </div>
     </div>

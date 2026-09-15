@@ -380,6 +380,7 @@ export const AttendanceView: React.FC<AttendanceViewProps> = ({
   const [isExportingPdf, setIsExportingPdf] = useState(false);
   const [isExportingWord, setIsExportingWord] = useState(false);
   const [exportSuccessMessage, setExportSuccessMessage] = useState<string | null>(null);
+  const [exportErrorMessage, setExportErrorMessage] = useState<string | null>(null);
 
   const fallbackProfile: TeacherProfile = profile || {
     fullName: 'أستاذ المادة',
@@ -393,6 +394,7 @@ export const AttendanceView: React.FC<AttendanceViewProps> = ({
   const handleExportAttendancePdf = async () => {
     if (!activeClass || isExportingPdf) return;
     setIsExportingPdf(true);
+    setExportErrorMessage(null);
     try {
       await exportAttendanceSheetPdf(
         activeClass,
@@ -403,9 +405,10 @@ export const AttendanceView: React.FC<AttendanceViewProps> = ({
       );
       setExportSuccessMessage('تم تصدير سجل الحضور والغياب كملف PDF بنجاح وحفظه في جهازك');
       setTimeout(() => setExportSuccessMessage(null), 4000);
-    } catch (err) {
+    } catch (err: any) {
       console.error('Failed to export attendance PDF:', err);
-      window.print();
+      setExportErrorMessage(err?.message || 'تعذر تصدير ورقة الحضور كملف PDF، يرجى إعادة المحاولة.');
+      setTimeout(() => setExportErrorMessage(null), 6000);
     } finally {
       setIsExportingPdf(false);
     }
@@ -469,7 +472,7 @@ export const AttendanceView: React.FC<AttendanceViewProps> = ({
                   الحضور والغياب
                 </h2>
                 <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                  رصد ومتابعة انضباط وغيابات الطلاب مع حفظ فوري ومحلي 100% دون إنترنت
+                  رصد ومتابعة انضباط وغيابات الطلاب وإحصائيات الحصص
                 </p>
               </div>
             </div>
@@ -634,6 +637,13 @@ export const AttendanceView: React.FC<AttendanceViewProps> = ({
             <span>{exportSuccessMessage}</span>
           </div>
         )}
+
+        {exportErrorMessage && (
+          <div className="mt-3 p-3 rounded-xl bg-rose-50 dark:bg-rose-950/60 border border-rose-200 dark:border-rose-800 text-rose-800 dark:text-rose-200 text-xs font-bold flex items-center gap-2 animate-in fade-in">
+            <span className="w-4 h-4 text-rose-600 font-bold shrink-0">⚠️</span>
+            <span>{exportErrorMessage}</span>
+          </div>
+        )}
       </div>
 
       {/* ========================================================================= */}
@@ -702,7 +712,7 @@ export const AttendanceView: React.FC<AttendanceViewProps> = ({
                 }`}
               >
                 <Save className="w-4 h-4" />
-                <span>{isSavedRecently ? 'تم الحفظ في IndexedDB ✓' : isSaving ? 'جاري الحفظ...' : 'حفظ السجل'}</span>
+                <span>{isSavedRecently ? 'تم الحفظ بنجاح ✓' : isSaving ? 'جاري الحفظ...' : 'حفظ السجل'}</span>
               </button>
             </div>
           </div>

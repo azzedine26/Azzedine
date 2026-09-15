@@ -285,7 +285,7 @@ export const EducationalStageModal: React.FC<EducationalStageModalProps> = ({
           <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-700 text-xs text-slate-600 dark:text-slate-300 flex items-center gap-2">
             <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
             <span>
-              يتم حفظ هذا الاختيار محلياً في <strong>IndexedDB</strong> على جهازك دون حاجة للإنترنت، ولن يُطلب منك مجدداً. يمكنك تعديله لاحقاً من صفحة الإعدادات.
+              يتم حفظ هذا الاختيار محلياً على جهازك دون حاجة للإنترنت، ولن يُطلب منك مجدداً. يمكنك تعديله لاحقاً من صفحة الإعدادات.
             </span>
           </div>
         </div>

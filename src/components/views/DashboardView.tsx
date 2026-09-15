@@ -18,7 +18,8 @@ import {
   Printer,
   FileText,
   Bell,
-  Folder
+  Folder,
+  Dices
 } from 'lucide-react';
 import { ClassItem, StudentItem, TeacherProfile, ActiveTab, ScheduleSession, LessonPlan, AssessmentItem, AttendanceRecord, ReminderItem, LibraryItem } from '../../types';
 import { ASSESSMENT_TYPE_INFO, TRIMESTER_INFO } from '../../utils/gradeCalculations';
@@ -149,6 +150,13 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             >
               <UserCheck className="w-4 h-4 text-emerald-200" />
               <span>الحضور والغياب</span>
+            </button>
+            <button
+              onClick={() => onNavigateTab('random_picker')}
+              className="px-4 py-2.5 rounded-xl bg-emerald-600/90 hover:bg-emerald-600 text-white text-xs sm:text-sm font-bold border border-emerald-400/40 shadow-md transition transform active:scale-95 flex items-center gap-2"
+            >
+              <Dices className="w-4 h-4 text-emerald-200" />
+              <span>القرعة العشوائية</span>
             </button>
             <button
               onClick={() => onNavigateTab('reports')}
@@ -361,7 +369,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                 لم تقم بإضافة أي قسم بعد
               </p>
               <p className="text-xs text-slate-400 mt-1">
-                ابدأ بإضافة أول قسم لك لتسجيل طلابك وتسييرهم دون إنترنت.
+                ابدأ بإضافة أول قسم لك لتسجيل طلابك وتسييرهم.
               </p>
               <button
                 onClick={onOpenAddClass}
@@ -508,17 +516,6 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             )}
           </div>
 
-          {/* Quick Offline Database Indicator Card */}
-          <div className="p-4 rounded-2xl bg-emerald-50/80 dark:bg-emerald-950/40 border border-emerald-200/80 dark:border-emerald-900/60 flex items-start gap-3">
-            <div className="w-8 h-8 rounded-xl bg-emerald-600 text-white flex items-center justify-center shrink-0">
-              <Database className="w-4 h-4" />
-            </div>
-            <div className="text-xs text-emerald-900 dark:text-emerald-200">
-              <strong className="block font-bold mb-0.5">التخزين المحلي الآمن (IndexedDB)</strong>
-              بيانات أقسامك، طلابك، مذكراتك وجدولك محفوظة كلياً داخل جهازك دون الحاجة لأي اتصال بالإنترنت.
-            </div>
-          </div>
-
           {/* Quick Reminders Card */}
           <div 
             onClick={() => onNavigateTab('reminders')}
@@ -566,7 +563,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             </div>
             <div className="text-xs text-emerald-950 dark:text-emerald-200">
               <strong className="block font-bold mb-0.5">مكتبة الدروس والملفات ({libraryItems.length})</strong>
-              تخزين محلي للمذكرات والملفات (PDF، Word، صور) مع إمكانية الفتح والمراجعة بدون إنترنت.
+              إدارة وتنظيم المذكرات والملفات (PDF، Word، صور) مع إمكانية الفتح والمراجعة.
             </div>
           </div>
         </div>
@@ -584,7 +581,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                 آخر المذكرات وتحاضير الدروس
               </h3>
               <p className="text-xs text-slate-500 dark:text-slate-400">
-                متابعة الدروس المحضرة والمحفوظة في قاعدة بيانات الهاتف
+                متابعة الدروس المحضرة والمذكرات البيداغوجية
               </p>
             </div>
           </div>

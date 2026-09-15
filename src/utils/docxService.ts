@@ -318,7 +318,7 @@ export async function exportGradesSheetDocx(
         shading: headerShading,
         children: [
           createP(a.title, { bold: true, alignment: AlignmentType.CENTER }),
-          createP(`(م ${a.coefficient || 1} / ${a.maxScore || 20})`, { size: 14, alignment: AlignmentType.CENTER }),
+          createP(`(/ ${a.maxScore || 20})`, { size: 14, alignment: AlignmentType.CENTER }),
         ],
       })
     );

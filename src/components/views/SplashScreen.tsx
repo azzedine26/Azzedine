@@ -1,5 +1,5 @@
 import React from 'react';
-import { BookOpen, WifiOff, Smartphone, ShieldCheck, ArrowLeft } from 'lucide-react';
+import { BookOpen, Sparkles, Smartphone, ShieldCheck, ArrowLeft } from 'lucide-react';
 import { TeacherProfile } from '../../types';
 
 interface SplashScreenProps {
@@ -21,7 +21,7 @@ export const SplashScreen: React.FC<SplashScreenProps> = ({
         {/* Brand Badge */}
         <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-emerald-100 dark:bg-emerald-950/80 text-emerald-800 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800 text-xs font-bold mb-6">
           <span className="w-2 h-2 rounded-full bg-emerald-600 animate-pulse" />
-          <span>تطبيق الأستاذ الجزائري • إصدار PWA المستقل</span>
+          <span>تطبيق الأستاذ الجزائري • المنظومة البيداغوجية المتكاملة</span>
         </div>
 
         {/* Hero Visual */}
@@ -37,18 +37,18 @@ export const SplashScreen: React.FC<SplashScreenProps> = ({
           مرحباً بك في تطبيق <span className="text-emerald-600 dark:text-emerald-400">أستاذ ديزاد</span>
         </h1>
         <p className="mt-3 text-sm sm:text-base text-slate-600 dark:text-slate-300 max-w-lg mx-auto leading-relaxed">
-          الرفيق الرقمي المتكامل للأساتذة في مختلف الأطوار التعليمية بالجزائر. إدارة كاملة للأقسام والطلاب في جيبك، مع العمل <strong className="text-emerald-700 dark:text-emerald-400">100% بدون اتصال بالإنترنت</strong>.
+          الرفيق الرقمي المتكامل للأساتذة في مختلف الأطوار التعليمية بالجزائر. إدارة شاملة للأقسام، الطلاب، المذكرات، والتقويمات التربوية.
         </p>
 
         {/* Core Pillars Grid */}
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 my-8 text-right">
           <div className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs">
             <div className="w-8 h-8 rounded-xl bg-emerald-100 dark:bg-emerald-950 text-emerald-600 dark:text-emerald-400 flex items-center justify-center mb-3">
-              <WifiOff className="w-4 h-4" />
+              <Sparkles className="w-4 h-4" />
             </div>
-            <h4 className="font-bold text-sm text-slate-900 dark:text-white">أوفلاين 100%</h4>
+            <h4 className="font-bold text-sm text-slate-900 dark:text-white">سهولة وسرعة</h4>
             <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-              يعمل في الحجرة والمخبر بدون شبكة عبر قاعدة IndexedDB محلية.
+              إدارة مرنة للحصص والغيابات ورصد النقاط داخل الحجرة والمخبر بكل سلاسة.
             </p>
           </div>
 
@@ -56,9 +56,9 @@ export const SplashScreen: React.FC<SplashScreenProps> = ({
             <div className="w-8 h-8 rounded-xl bg-sky-100 dark:bg-sky-950 text-sky-600 dark:text-sky-400 flex items-center justify-center mb-3">
               <Smartphone className="w-4 h-4" />
             </div>
-            <h4 className="font-bold text-sm text-slate-900 dark:text-white">هاتف وكمبيوتر</h4>
+            <h4 className="font-bold text-sm text-slate-900 dark:text-white">هاتف وحاسوب</h4>
             <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-              تصميم Mobile-First سلس، قابل للتثبيت كـ PWA وللتحويل إلى Android عبر Capacitor.
+              واجهة متناسقة ومريحة مصممة لتناسب مختلف الشاشات والأجهزة.
             </p>
           </div>
 
@@ -66,9 +66,9 @@ export const SplashScreen: React.FC<SplashScreenProps> = ({
             <div className="w-8 h-8 rounded-xl bg-amber-100 dark:bg-amber-950 text-amber-600 dark:text-amber-400 flex items-center justify-center mb-3">
               <ShieldCheck className="w-4 h-4" />
             </div>
-            <h4 className="font-bold text-sm text-slate-900 dark:text-white">خصوصية كاملة</h4>
+            <h4 className="font-bold text-sm text-slate-900 dark:text-white">أمان وخصوصية</h4>
             <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-              بيانات طلابك لا تغادر هاتفك أبداً مع إمكانية التصدير والاستيراد في أي وقت.
+              سجلاتك التعليمية خاصة بك دائماً مع إمكانية حفظ نسخة احتياطية واسترجاعها بسهولة.
             </p>
           </div>
         </div>

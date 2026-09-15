@@ -126,7 +126,7 @@ export interface SubjectCalculationConfig {
 export interface SubjectSetting {
   id: string;
   name: string; // اسم المادة
-  coefficient: number; // معامل المادة (معامل واحد فقط للمادة)
+  coefficient?: number | null; // معامل المادة (معامل واحد فقط للمادة)
   calculationMethod: SubjectCalculationConfig; // كيفية الحساب
   createdAt?: number;
   updatedAt?: number;
@@ -144,7 +144,30 @@ export interface AppSettings {
   updatedAt: number;
 }
 
-export type ActiveTab = 'splash' | 'dashboard' | 'classes' | 'students' | 'schedule' | 'lessons' | 'grades' | 'attendance' | 'reports' | 'library' | 'reminders' | 'settings';
+export type ActiveTab = 'splash' | 'dashboard' | 'classes' | 'students' | 'random_picker' | 'schedule' | 'lessons' | 'grades' | 'attendance' | 'reports' | 'library' | 'reminders' | 'settings';
+
+export interface RandomDrawRecord {
+  id: string;
+  studentId: string;
+  studentName: string;
+  studentGender?: 'male' | 'female';
+  studentNumber?: string;
+  classId: string;
+  className: string;
+  timestamp: number;
+  dateString: string;
+  timeString: string;
+  purpose?: string;
+}
+
+export interface RandomDrawClassState {
+  classId: string;
+  noRepeat: boolean;
+  selectedStudentIds: string[];
+  excludedStudentIds: string[];
+  lastSelectedStudentId?: string;
+  updatedAt: number;
+}
 
 export type ReminderPriority = 'low' | 'medium' | 'high';
 
@@ -179,6 +202,7 @@ export interface LibraryItem {
   fileExtension?: string; // pdf, docx, png, etc.
   fileSize?: number; // In bytes
   fileId?: string; // Key in LIBRARY_FILES store
+  thumbnailUrl?: string; // Cached local base64/dataURL thumbnail for visual preview
   content?: string; // For text/notes
   createdAt: number;
   updatedAt: number;

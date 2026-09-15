@@ -91,14 +91,16 @@ export const StudentSubjectBreakdownModal: React.FC<StudentSubjectBreakdownModal
             <div>
               <span className="text-[10px] text-slate-500 dark:text-slate-400 block">معامل المادة:</span>
               <span className="text-xl font-black text-slate-800 dark:text-white">
-                × {coefficient}
+                {typeof coefficient === 'number' && coefficient > 0 ? `× ${coefficient}` : '—'}
               </span>
-              <span className="text-[9px] text-slate-400 block">معامل واحد</span>
+              <span className="text-[9px] text-slate-400 block">
+                {typeof coefficient === 'number' && coefficient > 0 ? 'معامل واحد' : 'غير محدد'}
+              </span>
             </div>
             <div>
               <span className="text-[10px] text-slate-500 dark:text-slate-400 block">المجموع:</span>
               <span className="text-xl font-black text-purple-700 dark:text-purple-300">
-                {weightedTotal !== null ? weightedTotal.toFixed(2) : '-'}
+                {weightedTotal !== null ? weightedTotal.toFixed(2) : '—'}
               </span>
               <span className="text-[9px] text-slate-400 block">نقطة</span>
             </div>

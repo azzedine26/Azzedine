@@ -188,13 +188,6 @@ export const SUBJECT_CALCULATION_METHODS: CalculationMethodOption[] = [
     badge: 'أوزان متساوية',
     description: 'حساب المتوسط الحسابي العادي بجمع نقطة فرض 1 وفرض 2 والاختبار وقسمتها على 3 بالتساوي.',
   },
-  {
-    id: 'custom_weights',
-    title: 'أوزان مخصصة يحددها الأستاذ',
-    formula: '(فرض 1 × و1 + فرض 2 × و2 + الاختبار × و3) ÷ (و1 + و2 + و3)',
-    badge: 'صيغة مخصصة',
-    description: 'يتيح للأستاذ تحديد الوزن النسبي الدقيق للفرض 1 والفرض 2 والاختبار وفق التدرجات البيداغوجية لمادته.',
-  },
 ];
 
 export const INITIAL_SUBJECT_SETTINGS: SubjectSetting[] = [
@@ -760,8 +753,8 @@ export const INITIAL_ASSESSMENTS: AssessmentItem[] = [
   },
   {
     id: 'assess-demo-2',
-    title: 'الفرض المحروس الأول - الفصل الأول',
-    type: 'test',
+    title: 'الفرض الأول - الفصل الأول',
+    type: 'test1',
     classId: 'class-demo-1',
     className: '3 علوم تجريبية 1 (3 ع ت 1)',
     subject: 'الرياضيات',
@@ -777,6 +770,26 @@ export const INITIAL_ASSESSMENTS: AssessmentItem[] = [
     },
     createdAt: Date.now() - 86400000 * 12,
     updatedAt: Date.now() - 86400000 * 12,
+  },
+  {
+    id: 'assess-demo-2b',
+    title: 'الفرض الثاني - الفصل الأول',
+    type: 'test2',
+    classId: 'class-demo-1',
+    className: '3 علوم تجريبية 1 (3 ع ت 1)',
+    subject: 'الرياضيات',
+    trimester: 'T1',
+    date: '2024-11-20',
+    coefficient: 1,
+    maxScore: 20,
+    notes: 'الفرض الثاني: المتتاليات والدوال العددية.',
+    grades: {
+      'student-demo-1': { score: 17.0, isAbsent: false, note: 'إتقان المتتاليات العددية' },
+      'student-demo-2': { score: 18.5, isAbsent: false, note: 'ممتازة في التبرير والبرهان' },
+      'student-demo-3': { score: 13.5, isAbsent: false, note: 'تحسن ملحوظ عن الفرض الأول' },
+    },
+    createdAt: Date.now() - 86400000 * 8,
+    updatedAt: Date.now() - 86400000 * 8,
   },
   {
     id: 'assess-demo-3',
@@ -801,7 +814,7 @@ export const INITIAL_ASSESSMENTS: AssessmentItem[] = [
   {
     id: 'assess-demo-4',
     title: 'الفرض الأول - الفصل الأول',
-    type: 'test',
+    type: 'test1',
     classId: 'class-demo-2',
     className: '2 تقني رياضي (2 ت ر)',
     subject: 'الرياضيات',

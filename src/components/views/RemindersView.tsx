@@ -67,10 +67,10 @@ export const RemindersView: React.FC<RemindersViewProps> = ({
       const permission = await Notification.requestPermission();
       setNotificationStatus(permission);
       if (permission === 'granted') {
-        setRequestFeedback('تم تفعيل التنبيهات المحلية بنجاح! سيتم تنبيهك عند حلول المواعيد.');
+        setRequestFeedback('تم تفعيل التنبيهات بنجاح! سيتم تنبيهك عند حلول المواعيد.');
         try {
           new Notification('Ostad DZ - التذكيرات', {
-            body: 'تم تفعيل التنبيهات المحلية لتطبيق الأستاذ بنجاح.',
+            body: 'تم تفعيل تنبيهات تطبيق الأستاذ بنجاح.',
             icon: '/favicon.ico',
           });
         } catch {
@@ -224,9 +224,6 @@ export const RemindersView: React.FC<RemindersViewProps> = ({
                 <Bell className="w-3.5 h-3.5 text-amber-300" />
                 <span>المفكرة والتذكيرات التربوية</span>
               </span>
-              <span className="px-2.5 py-0.5 rounded-full bg-white/10 text-emerald-100 text-xs font-semibold">
-                محفوظة محلياً 100% دون إنترنت
-              </span>
             </div>
             
             <h1 className="text-2xl sm:text-3xl font-black tracking-tight text-white flex items-center gap-2">
@@ -242,7 +239,7 @@ export const RemindersView: React.FC<RemindersViewProps> = ({
             {notificationStatus !== 'granted' && (
               <button
                 onClick={handleRequestNotification}
-                title="تفعيل الإشعارات المحلية لتلقي تنبيهات عند حلول المواعيد"
+                title="تفعيل الإشعارات لتلقي تنبيهات عند حلول المواعيد"
                 className="px-3.5 py-2.5 rounded-xl bg-white/15 hover:bg-white/25 text-white text-xs font-bold border border-white/20 transition flex items-center gap-1.5"
               >
                 <BellRing className="w-4 h-4 text-amber-300" />

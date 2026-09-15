@@ -3,30 +3,54 @@
  * 100% offline, zero server calls.
  */
 export function downloadFile(blob: Blob, filename: string): void {
-  // Check if browser supports standard createObjectURL
-  const url = window.URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.style.display = 'none';
-  a.href = url;
-  a.download = filename;
+  const isPdf = filename.toLowerCase().endsWith('.pdf');
+  const mimeType = isPdf 
+    ? 'application/pdf' 
+    : 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
 
-  // Append to body to ensure click works across all mobile browsers (especially Android Chrome & iOS Safari)
-  document.body.appendChild(a);
-  
+  const typedBlob = blob.type ? blob : new Blob([blob], { type: mimeType });
+
   try {
-    a.click();
-  } catch (err) {
-    console.error('Trigger click failed, falling back to window.location', err);
-    window.location.href = url;
-  }
+    const url = window.URL.createObjectURL(typedBlob);
+    const a = document.createElement('a');
+    a.style.display = 'none';
+    a.href = url;
+    a.download = filename;
+    a.rel = 'noopener';
 
-  // Cleanup after safe timeout
-  setTimeout(() => {
-    if (document.body.contains(a)) {
-      document.body.removeChild(a);
+    document.body.appendChild(a);
+    a.click();
+
+    setTimeout(() => {
+      if (document.body.contains(a)) {
+        document.body.removeChild(a);
+      }
+      window.URL.revokeObjectURL(url);
+    }, 4000);
+  } catch (err) {
+    console.warn('URL.createObjectURL download failed, attempting FileReader dataURL fallback:', err);
+    try {
+      const reader = new FileReader();
+      reader.onload = () => {
+        const dataUrl = reader.result as string;
+        const a = document.createElement('a');
+        a.style.display = 'none';
+        a.href = dataUrl;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        setTimeout(() => {
+          if (document.body.contains(a)) {
+            document.body.removeChild(a);
+          }
+        }, 4000);
+      };
+      reader.readAsDataURL(typedBlob);
+    } catch (fallbackErr) {
+      console.error('All client download mechanisms failed:', fallbackErr);
+      throw new Error('تعذر تنزيل الملف، يرجى التحقق من أذونات المتصفح.');
     }
-    window.URL.revokeObjectURL(url);
-  }, 3000);
+  }
 }
 
 /**

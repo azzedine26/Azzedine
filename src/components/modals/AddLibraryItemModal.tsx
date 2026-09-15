@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { 
   X, 
   Upload, 
@@ -11,11 +11,22 @@ import {
   BookOpen, 
   AlertCircle,
   CheckCircle2,
-  Trash2
+  Trash2,
+  FileSpreadsheet
 } from 'lucide-react';
 import { ClassItem, LibraryItem, LibraryItemType, LibraryFileRecord } from '../../types';
 import { databaseService } from '../../db/databaseService';
 import { getSubjectsForGradeAndStage } from '../../data/algerianData';
+import { 
+  ACCEPTED_FILE_TYPES_ATTR, 
+  validateSelectedFile, 
+  formatFileSize, 
+  getFileCategory 
+} from '../../utils/fileHelpers';
+import { 
+  createThumbnailForFile, 
+  generateNoteThumbnail 
+} from '../../utils/fileThumbnailService';
 
 interface AddLibraryItemModalProps {
   isOpen: boolean;
@@ -51,6 +62,9 @@ export const AddLibraryItemModal: React.FC<AddLibraryItemModalProps> = ({
 
   // File upload state
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [fileCategory, setFileCategory] = useState<'pdf' | 'word' | 'image' | 'excel' | 'powerpoint' | 'text' | 'other'>('other');
+  const [fileExt, setFileExt] = useState<string>('');
+  const [imagePreviewUrl, setImagePreviewUrl] = useState<string | null>(null);
   const [isDragging, setIsDragging] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -67,12 +81,28 @@ export const AddLibraryItemModal: React.FC<AddLibraryItemModalProps> = ({
   const [error, setError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
 
+  // Clean up image preview URL on unmount or file reset
+  useEffect(() => {
+    return () => {
+      if (imagePreviewUrl) {
+        URL.revokeObjectURL(imagePreviewUrl);
+      }
+    };
+  }, [imagePreviewUrl]);
+
   // Sync subject when modal opens or defaultSubject changes
-  React.useEffect(() => {
+  useEffect(() => {
     if (isOpen) {
       setSubject(defaultSubject || 'الرياضيات');
       setFolderName(defaultFolder);
       setClassId(defaultClassId);
+    } else {
+      setSelectedFile(null);
+      setFileExt('');
+      if (imagePreviewUrl) {
+        URL.revokeObjectURL(imagePreviewUrl);
+        setImagePreviewUrl(null);
+      }
     }
   }, [isOpen, defaultSubject, defaultFolder, defaultClassId]);
 
@@ -110,8 +140,34 @@ export const AddLibraryItemModal: React.FC<AddLibraryItemModalProps> = ({
   };
 
   const processSelectedFile = (file: File) => {
+    const validation = validateSelectedFile(file);
+    if (!validation.valid) {
+      setError(validation.error || 'الملف المختار غير صالح.');
+      setSelectedFile(null);
+      setFileExt('');
+      if (imagePreviewUrl) {
+        URL.revokeObjectURL(imagePreviewUrl);
+        setImagePreviewUrl(null);
+      }
+      if (fileInputRef.current) fileInputRef.current.value = '';
+      return;
+    }
+
     setSelectedFile(file);
+    setFileCategory(validation.category);
+    setFileExt(validation.detectedExt);
     setError(null);
+
+    // If image, create temporary preview thumbnail
+    if (imagePreviewUrl) {
+      URL.revokeObjectURL(imagePreviewUrl);
+      setImagePreviewUrl(null);
+    }
+    if (validation.category === 'image') {
+      const url = URL.createObjectURL(file);
+      setImagePreviewUrl(url);
+    }
+
     // Auto populate title from filename without extension if empty
     if (!title.trim()) {
       const nameWithoutExt = file.name.replace(/\.[^/.]+$/, '');
@@ -137,19 +193,6 @@ export const AddLibraryItemModal: React.FC<AddLibraryItemModalProps> = ({
     }
   };
 
-  const formatFileSize = (bytes: number) => {
-    if (bytes === 0) return '0 بايت';
-    const k = 1024;
-    const sizes = ['بايت', 'كيلوبايت', 'ميجابايت', 'جيجابايت'];
-    const i = Math.floor(Math.log(bytes) / Math.log(k));
-    return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
-  };
-
-  const getFileExtension = (filename: string) => {
-    const parts = filename.split('.');
-    return parts.length > 1 ? parts.pop()?.toLowerCase() || '' : '';
-  };
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
@@ -168,23 +211,43 @@ export const AddLibraryItemModal: React.FC<AddLibraryItemModalProps> = ({
         return;
       }
 
+      const validation = validateSelectedFile(selectedFile);
+      if (!validation.valid) {
+        setError(validation.error || 'الملف المختار غير صالح.');
+        return;
+      }
+
       setIsSaving(true);
       try {
         const fileId = `lib_file_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
-        const ext = getFileExtension(selectedFile.name);
+        const ext = validation.detectedExt;
+        const mime = validation.detectedMime;
 
-        // 1. Save large binary blob into IndexedDB LIBRARY_FILES object store
+        // Ensure stored Blob retains the normalized MIME type
+        const normalizedBlob = selectedFile.type === mime 
+          ? selectedFile 
+          : new Blob([selectedFile], { type: mime });
+
+        // 1. Save full binary blob into IndexedDB LIBRARY_FILES object store (no Base64 inflation)
         const fileRecord: LibraryFileRecord = {
           id: fileId,
           name: selectedFile.name,
-          type: selectedFile.type || 'application/octet-stream',
+          type: mime,
           size: selectedFile.size,
-          blob: selectedFile,
+          blob: normalizedBlob,
           updatedAt: Date.now(),
         };
         await databaseService.saveLibraryFile(fileRecord);
 
-        // 2. Save metadata into IndexedDB LIBRARY store
+        // 2. Generate local thumbnail for fast card preview
+        let thumbnailUrl: string | undefined = undefined;
+        try {
+          thumbnailUrl = await createThumbnailForFile(normalizedBlob, selectedFile.name, ext, title.trim());
+        } catch (e) {
+          console.warn('Thumbnail generation on upload failed:', e);
+        }
+
+        // 3. Save metadata into IndexedDB LIBRARY store
         const newItem: LibraryItem = {
           id: `lib_item_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`,
           title: title.trim(),
@@ -195,10 +258,11 @@ export const AddLibraryItemModal: React.FC<AddLibraryItemModalProps> = ({
           className: matchedClass ? `${matchedClass.name} (${matchedClass.division || matchedClass.subject})` : undefined,
           folderName: finalFolder,
           fileName: selectedFile.name,
-          fileType: selectedFile.type,
+          fileType: mime,
           fileExtension: ext,
           fileSize: selectedFile.size,
           fileId: fileId,
+          thumbnailUrl: thumbnailUrl,
           createdAt: Date.now(),
           updatedAt: Date.now(),
         };
@@ -207,8 +271,8 @@ export const AddLibraryItemModal: React.FC<AddLibraryItemModalProps> = ({
         onItemAdded(newItem);
         onClose();
       } catch (err) {
-        console.error('Failed to save file to IndexedDB:', err);
-        setError('حدث خطأ أثناء حفظ الملف محلياً في IndexedDB.');
+        console.error('Failed to save file:', err);
+        setError('حدث خطأ أثناء حفظ الملف.');
       } finally {
         setIsSaving(false);
       }
@@ -221,6 +285,17 @@ export const AddLibraryItemModal: React.FC<AddLibraryItemModalProps> = ({
 
       setIsSaving(true);
       try {
+        let thumbnailUrl: string | undefined = undefined;
+        try {
+          thumbnailUrl = generateNoteThumbnail(
+            noteContent.trim(),
+            title.trim(),
+            (defaultSubject || subject || 'الرياضيات').trim()
+          );
+        } catch (e) {
+          console.warn('Note thumbnail generation failed:', e);
+        }
+
         const newItem: LibraryItem = {
           id: `lib_item_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`,
           title: title.trim(),
@@ -231,6 +306,7 @@ export const AddLibraryItemModal: React.FC<AddLibraryItemModalProps> = ({
           className: matchedClass ? `${matchedClass.name} (${matchedClass.division || matchedClass.subject})` : undefined,
           folderName: finalFolder,
           content: noteContent.trim(),
+          thumbnailUrl: thumbnailUrl,
           createdAt: Date.now(),
           updatedAt: Date.now(),
         };
@@ -239,8 +315,8 @@ export const AddLibraryItemModal: React.FC<AddLibraryItemModalProps> = ({
         onItemAdded(newItem);
         onClose();
       } catch (err) {
-        console.error('Failed to save note to IndexedDB:', err);
-        setError('حدث خطأ أثناء حفظ الملاحظة في IndexedDB.');
+        console.error('Failed to save note:', err);
+        setError('حدث خطأ أثناء حفظ الملاحظة.');
       } finally {
         setIsSaving(false);
       }
@@ -264,7 +340,7 @@ export const AddLibraryItemModal: React.FC<AddLibraryItemModalProps> = ({
                 إضافة إلى مكتبة الدروس والملفات
               </h3>
               <p className="text-xs text-slate-500 dark:text-slate-400">
-                حفظ محلي فوري وآمن داخل جهازك يعمل بدون إنترنت (IndexedDB)
+                إضافة وتنظيم مستنداتك ودروسك البيداغوجية
               </p>
             </div>
           </div>
@@ -317,15 +393,17 @@ export const AddLibraryItemModal: React.FC<AddLibraryItemModalProps> = ({
           {tab === 'file' && (
             <div>
               <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
-                الملف التعليمي المراد حفظه محلياً:
+                الملف التعليمي المراد إضافته:
               </label>
 
               <input
                 type="file"
+                id="library-file-input"
+                name="library-file-input"
                 ref={fileInputRef}
                 onChange={handleFileSelect}
                 className="hidden"
-                accept=".pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx,.png,.jpg,.jpeg,.webp,.txt"
+                accept={ACCEPTED_FILE_TYPES_ATTR}
               />
 
               {!selectedFile ? (
@@ -348,36 +426,90 @@ export const AddLibraryItemModal: React.FC<AddLibraryItemModalProps> = ({
                       اضغط لاختيار ملف من جهازك أو اسحبه وأفلته هنا
                     </p>
                     <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-                      ندعم ملفات PDF، مستندات Word، العروض التقديمية، الجداول، والصور (PNG, JPG, WEBP)
+                      يدعم مستندات PDF، ملفات Word (.docx/.doc)، والصور (PNG, JPG, WEBP)
                     </p>
                   </div>
-                  <span className="px-3.5 py-1.5 rounded-lg bg-emerald-100/70 dark:bg-emerald-950/70 text-emerald-800 dark:text-emerald-300 text-xs font-bold">
-                    تخزين غير محدود عبر IndexedDB (بدون إنترنت)
-                  </span>
+                  <div className="flex items-center gap-2 flex-wrap justify-center mt-1">
+                    <span className="px-4 py-2 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold shadow-sm transition flex items-center gap-1.5">
+                      <FileText className="w-3.5 h-3.5" />
+                      <span>اختيار ملف (منتقي الملفات / Files)</span>
+                    </span>
+                  </div>
                 </div>
               ) : (
-                <div className="p-4 rounded-xl bg-emerald-50/60 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800/60 flex items-center justify-between gap-3">
+                <div className={`p-4 rounded-xl border flex items-center justify-between gap-3 ${
+                  fileCategory === 'pdf'
+                    ? 'bg-rose-50/70 dark:bg-rose-950/30 border-rose-200 dark:border-rose-900/60'
+                    : fileCategory === 'word'
+                    ? 'bg-blue-50/70 dark:bg-blue-950/30 border-blue-200 dark:border-blue-900/60'
+                    : fileCategory === 'image'
+                    ? 'bg-emerald-50/70 dark:bg-emerald-950/30 border-emerald-200 dark:border-emerald-800/60'
+                    : 'bg-slate-50 dark:bg-slate-800/60 border-slate-200 dark:border-slate-700'
+                }`}>
                   <div className="flex items-center gap-3 min-w-0">
-                    <div className="w-10 h-10 rounded-xl bg-emerald-600 text-white flex items-center justify-center shrink-0">
-                      <File className="w-5 h-5" />
-                    </div>
+                    {fileCategory === 'image' && imagePreviewUrl ? (
+                      <div className="w-12 h-12 rounded-xl overflow-hidden border border-emerald-200 dark:border-emerald-800 shrink-0 bg-white dark:bg-slate-900 shadow-sm">
+                        <img 
+                          src={imagePreviewUrl} 
+                          alt={selectedFile.name} 
+                          className="w-full h-full object-cover"
+                        />
+                      </div>
+                    ) : (
+                      <div className={`w-11 h-11 rounded-xl flex items-center justify-center shrink-0 shadow-sm ${
+                        fileCategory === 'pdf'
+                          ? 'bg-rose-600 text-white'
+                          : fileCategory === 'word'
+                          ? 'bg-blue-600 text-white'
+                          : fileCategory === 'excel'
+                          ? 'bg-emerald-600 text-white'
+                          : 'bg-slate-700 text-white'
+                      }`}>
+                        {fileCategory === 'pdf' ? (
+                          <FileText className="w-5 h-5" />
+                        ) : fileCategory === 'word' ? (
+                          <FileText className="w-5 h-5" />
+                        ) : fileCategory === 'image' ? (
+                          <ImageIcon className="w-5 h-5" />
+                        ) : fileCategory === 'excel' ? (
+                          <FileSpreadsheet className="w-5 h-5" />
+                        ) : (
+                          <File className="w-5 h-5" />
+                        )}
+                      </div>
+                    )}
                     <div className="min-w-0">
                       <p className="text-sm font-bold text-slate-900 dark:text-slate-100 truncate">
                         {selectedFile.name}
                       </p>
-                      <p className="text-xs text-slate-500 dark:text-slate-400">
-                        الحجم: {formatFileSize(selectedFile.size)} • النوع: {getFileExtension(selectedFile.name).toUpperCase()}
-                      </p>
+                      <div className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400 mt-0.5 flex-wrap">
+                        <span>الحجم: {formatFileSize(selectedFile.size)}</span>
+                        <span>•</span>
+                        <span className="font-semibold uppercase text-slate-700 dark:text-slate-300">
+                          {fileCategory === 'pdf' 
+                            ? 'مستند PDF' 
+                            : fileCategory === 'word' 
+                            ? `Word (${fileExt.toUpperCase()})` 
+                            : fileCategory === 'image' 
+                            ? `صورة (${fileExt.toUpperCase()})` 
+                            : fileExt.toUpperCase()}
+                        </span>
+                      </div>
                     </div>
                   </div>
                   <button
                     type="button"
                     onClick={() => {
                       setSelectedFile(null);
+                      setFileExt('');
+                      if (imagePreviewUrl) {
+                        URL.revokeObjectURL(imagePreviewUrl);
+                        setImagePreviewUrl(null);
+                      }
                       if (fileInputRef.current) fileInputRef.current.value = '';
                     }}
-                    className="p-2 text-rose-500 hover:text-rose-700 hover:bg-rose-100/60 dark:hover:bg-rose-950/60 rounded-xl transition"
-                    title="إزالة الملف"
+                    className="p-2 text-rose-500 hover:text-rose-700 hover:bg-rose-100/60 dark:hover:bg-rose-950/60 rounded-xl transition shrink-0"
+                    title="إزالة الملف واختيار آخر"
                   >
                     <Trash2 className="w-4 h-4" />
                   </button>
@@ -518,7 +650,7 @@ export const AddLibraryItemModal: React.FC<AddLibraryItemModalProps> = ({
           {/* Offline notice */}
           <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 text-xs text-slate-500 dark:text-slate-400 flex items-center gap-2">
             <CheckCircle2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
-            <span>سيتم حفظ هذا العنصر وملفاته مباشرة في متصفحك محلياً (IndexedDB) للاستخدام الدائم بدون إنترنت.</span>
+            <span>سيتم حفظ هذا العنصر وملفاته مباشرة في جهازك للاستخدام الدائم بدون إنترنت.</span>
           </div>
 
           {/* Actions */}
@@ -538,7 +670,7 @@ export const AddLibraryItemModal: React.FC<AddLibraryItemModalProps> = ({
               {isSaving ? (
                 <>
                   <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                  <span>جاري الحفظ في IndexedDB...</span>
+                  <span>جاري الحفظ...</span>
                 </>
               ) : (
                 <>

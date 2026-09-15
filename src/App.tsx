@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Header } from './components/Header';
 import { Sidebar } from './components/Sidebar';
-import { OfflineIndicator } from './components/OfflineIndicator';
 import { SplashScreen } from './components/views/SplashScreen';
 import { DashboardView } from './components/views/DashboardView';
 import { ClassesView } from './components/views/ClassesView';
@@ -14,6 +13,7 @@ import { AttendanceView } from './components/views/AttendanceView';
 import { ReportsView } from './components/views/ReportsView';
 import { RemindersView } from './components/views/RemindersView';
 import { LibraryView } from './components/views/LibraryView';
+import { RandomPickerView } from './components/views/RandomPickerView';
 import { AddClassModal } from './components/modals/AddClassModal';
 import { AddStudentModal } from './components/modals/AddStudentModal';
 import { AddSessionModal } from './components/modals/AddSessionModal';
@@ -261,11 +261,11 @@ export default function App() {
     if (editingClass) {
       const updated = await databaseService.updateClass(classData as ClassItem);
       setClasses((prev) => prev.map((c) => (c.id === updated.id ? updated : c)));
-      showToast(`تم تحديث القسم "${updated.name}" بنجاح في الذاكرة المحلية.`);
+      showToast(`تم تحديث القسم "${updated.name}" بنجاح.`);
     } else {
       const created = await databaseService.addClass(classData as ClassItem);
       setClasses((prev) => [created, ...prev]);
-      showToast(`تم إنشاء القسم "${created.name}" وحفظه محلياً في IndexedDB.`);
+      showToast(`تم إنشاء القسم "${created.name}" بنجاح.`);
     }
     setEditingClass(null);
   };
@@ -294,7 +294,7 @@ export default function App() {
     } else {
       const created = await databaseService.addStudent(studentData as StudentItem);
       setStudents((prev) => [created, ...prev]);
-      showToast(`تم تسجيل التلميذ "${created.lastName} ${created.firstName}" محلياً.`);
+      showToast(`تم تسجيل التلميذ "${created.lastName} ${created.firstName}" بنجاح.`);
     }
     setEditingStudent(null);
   };
@@ -433,7 +433,7 @@ export default function App() {
       } else {
         const created = await databaseService.addLesson(lessonData as LessonPlan);
         setLessons((prev) => [created, ...prev]);
-        showToast('تم حفظ تحضير الدرس في الذاكرة المحلية بنجاح.');
+        showToast('تم حفظ تحضير الدرس بنجاح.');
       }
     } catch (err) {
       console.error('Error saving lesson:', err);
@@ -474,7 +474,7 @@ export default function App() {
       } else {
         const created = await databaseService.addAssessment(assessmentData as AssessmentItem);
         setAssessments((prev) => [created, ...prev]);
-        showToast('تم إنشاء التقييم وحفظه محلياً في الذاكرة.');
+        showToast('تم إنشاء التقييم بنجاح.');
       }
     } catch (err) {
       console.error('Error saving assessment:', err);
@@ -499,7 +499,7 @@ export default function App() {
     try {
       const updated = await databaseService.saveBatchGrades(assessmentId, grades);
       setAssessments((prev) => prev.map((a) => (a.id === updated.id ? updated : a)));
-      showToast('تم رصد وحفظ نقاط الطلاب محلياً بنجاح.');
+      showToast('تم حفظ نقاط الطلاب بنجاح.');
     } catch (err) {
       console.error('Error saving grades:', err);
       showToast('حدث خطأ أثناء حفظ النقاط.');
@@ -522,7 +522,7 @@ export default function App() {
       await databaseService.saveSubjectSetting(setting);
       const updated = await databaseService.getAllSubjectSettings();
       setSubjectSettings(updated);
-      showToast(`تم حفظ إعدادات مادة "${setting.name}" وكيفية الحساب في الذاكرة بنجاح.`);
+      showToast(`تم حفظ إعدادات مادة "${setting.name}" بنجاح.`);
     } catch (err) {
       console.error('Error saving subject setting:', err);
       showToast('حدث خطأ أثناء حفظ إعدادات المادة.');
@@ -647,10 +647,10 @@ export default function App() {
         }
         return [record, ...prev];
       });
-      showToast(`تم حفظ سجل الحضور والغياب ليوم ${record.date} في IndexedDB.`);
+      showToast(`تم حفظ سجل الحضور والغياب ليوم ${record.date} بنجاح.`);
     } catch (err) {
       console.error('Failed to save attendance record:', err);
-      showToast('تعذر حفظ سجل الحضور في الذاكرة المحلية.');
+      showToast('تعذر حفظ سجل الحضور.');
     }
   };
 
@@ -687,7 +687,7 @@ export default function App() {
         }
         return [saved, ...prev];
       });
-      showToast(editingReminder ? 'تم تعديل التذكير بنجاح في IndexedDB.' : 'تمت إضافة التذكير بنجاح في IndexedDB.');
+      showToast(editingReminder ? 'تم تعديل التذكير بنجاح.' : 'تمت إضافة التذكير بنجاح.');
     } catch (err) {
       console.error('Error saving reminder:', err);
       showToast('حدث خطأ أثناء حفظ التذكير.');
@@ -798,11 +798,8 @@ export default function App() {
 
       {/* 2. Main content container: flex sibling occupying 100% of remaining width */}
       <div className="flex-1 min-w-0 flex flex-col min-h-screen max-w-full">
-        {/* Sticky Top Bar (Contains Offline status and main Header) */}
+        {/* Sticky Top Bar (Contains main Header) */}
         <div className="sticky top-0 z-30 w-full bg-white/95 dark:bg-slate-900/95 backdrop-blur-md">
-          {/* Offline & Connectivity Banner */}
-          <OfflineIndicator />
-
           {/* Top Header */}
           <Header
             currentTab={currentTab}
@@ -908,6 +905,17 @@ export default function App() {
               />
             )}
 
+            {currentTab === 'random_picker' && (
+              <RandomPickerView
+                classes={classes}
+                students={students}
+                attendanceRecords={attendanceRecords}
+                profile={settings.profile}
+                onNavigateToClasses={() => setCurrentTab('classes')}
+                onNavigateToStudents={() => setCurrentTab('students')}
+              />
+            )}
+
             {currentTab === 'lessons' && (
               <LessonsView
                 lessons={lessons}
@@ -934,6 +942,9 @@ export default function App() {
                 onNavigateToClasses={() => setCurrentTab('classes')}
                 onOpenAddSubject={handleOpenAddSubject}
                 onOpenEditSubject={handleOpenEditSubject}
+                onSaveGrades={handleSaveGrades}
+                onSaveAssessment={handleSaveAssessment}
+                onSaveSubjectSetting={handleSaveSubjectSetting}
               />
             )}
 
@@ -1168,11 +1179,11 @@ export default function App() {
           deleteModal.type === 'class'
             ? `هل أنت متأكد من رغبتك في حذف: ${deleteModal.name}؟`
             : deleteModal.type === 'student'
-            ? `هل أنت متأكد من حذف التلميذ "${deleteModal.name}" نهائياً من السجل المحلي؟`
+            ? `هل أنت متأكد من حذف التلميذ "${deleteModal.name}" نهائياً؟`
             : deleteModal.type === 'session'
             ? `هل أنت متأكد من حذف ${deleteModal.name} نهائياً من الجدول الأسبوعي؟`
             : deleteModal.type === 'lesson'
-            ? `هل أنت متأكد من حذف مذكرة الدرس "${deleteModal.name}" نهائياً من الذاكرة المحلية؟`
+            ? `هل أنت متأكد من حذف مذكرة الدرس "${deleteModal.name}" نهائياً؟`
             : deleteModal.type === 'assessment'
             ? `هل أنت متأكد من حذف التقييم "${deleteModal.name}" وكافة النقاط المرصودة فيه نهائياً؟`
             : deleteModal.type === 'subject'

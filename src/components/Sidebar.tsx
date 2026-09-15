@@ -11,6 +11,7 @@ import {
   Settings,
   Bell,
   Folder,
+  Dices,
   ChevronLeft,
   ChevronRight,
   X,
@@ -90,6 +91,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
       label: 'الطلاب',
       icon: Users,
       badge: studentsCount,
+    },
+    {
+      id: 'random_picker',
+      label: 'القرعة العشوائية',
+      icon: Dices,
     },
     {
       id: 'attendance',
@@ -277,7 +283,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             <div className="p-3 border-t border-slate-200/80 dark:border-slate-800/80 shrink-0 bg-slate-50/50 dark:bg-slate-800/30">
               <div className="flex items-center justify-between px-1">
                 <p className="text-[11px] text-slate-500 dark:text-slate-400 font-bold">
-                  Ostad DZ • بدون إنترنت 100%
+                  Ostad DZ • الرفيق البيداغوجي
                 </p>
                 <button
                   type="button"
@@ -454,7 +460,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
           {!isDesktopCollapsed ? (
             <div className="flex items-center justify-between px-2">
               <p className="text-[10px] text-slate-500 dark:text-slate-400 font-bold">
-                Ostad DZ • بدون إنترنت 100%
+                Ostad DZ • الرفيق البيداغوجي
               </p>
               <button
                 type="button"

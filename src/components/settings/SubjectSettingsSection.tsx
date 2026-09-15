@@ -64,7 +64,7 @@ export const SubjectSettingsSection: React.FC<SubjectSettingsSectionProps> = ({
         </div>
         <div className="flex items-center gap-1.5 text-slate-700 dark:text-slate-300">
           <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-          <span>تخزين دائم في IndexedDB</span>
+          <span>تخزين دائم في الذاكرة المحلية</span>
         </div>
       </div>
 

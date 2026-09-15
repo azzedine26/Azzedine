@@ -25,6 +25,8 @@ export function LessonDetailModal({
 }: LessonDetailModalProps) {
   const [isExportingPdf, setIsExportingPdf] = useState(false);
   const [isExportingWord, setIsExportingWord] = useState(false);
+  const [exportSuccessMessage, setExportSuccessMessage] = useState<string | null>(null);
+  const [exportErrorMessage, setExportErrorMessage] = useState<string | null>(null);
 
   if (!isOpen || !lesson) return null;
 
@@ -46,11 +48,15 @@ export function LessonDetailModal({
   const handleExportPdf = async () => {
     if (isExportingPdf) return;
     setIsExportingPdf(true);
+    setExportErrorMessage(null);
     try {
       await exportLessonPlanPdf(lesson, currentClass || null, fallbackProfile);
-    } catch (err) {
+      setExportSuccessMessage('تم تصدير المذكرة كملف PDF بنجاح وحفظها في جهازك');
+      setTimeout(() => setExportSuccessMessage(null), 4000);
+    } catch (err: any) {
       console.error('Failed to export lesson PDF:', err);
-      window.print();
+      setExportErrorMessage(err?.message || 'تعذر تصدير المذكرة كملف PDF، يرجى إعادة المحاولة.');
+      setTimeout(() => setExportErrorMessage(null), 6000);
     } finally {
       setIsExportingPdf(false);
     }
@@ -59,10 +65,15 @@ export function LessonDetailModal({
   const handleExportWord = async () => {
     if (isExportingWord) return;
     setIsExportingWord(true);
+    setExportErrorMessage(null);
     try {
       await exportLessonPlanDocx(lesson, fallbackProfile);
-    } catch (err) {
+      setExportSuccessMessage('تم تصدير المذكرة كملف Word بنجاح وحفظها في جهازك');
+      setTimeout(() => setExportSuccessMessage(null), 4000);
+    } catch (err: any) {
       console.error('Failed to export lesson Word docx:', err);
+      setExportErrorMessage(err?.message || 'تعذر تصدير المذكرة كملف Word، يرجى إعادة المحاولة.');
+      setTimeout(() => setExportErrorMessage(null), 6000);
     } finally {
       setIsExportingWord(false);
     }
@@ -152,6 +163,21 @@ export function LessonDetailModal({
 
         {/* Modal Scrollable Content */}
         <div className="flex-1 min-h-0 overflow-y-auto p-5 sm:p-6 space-y-6">
+          {/* Notifications */}
+          {exportSuccessMessage && (
+            <div className="p-3.5 rounded-2xl bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200 dark:border-emerald-800 text-emerald-800 dark:text-emerald-200 text-xs sm:text-sm font-bold flex items-center gap-2 animate-in fade-in">
+              <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+              <span>{exportSuccessMessage}</span>
+            </div>
+          )}
+
+          {exportErrorMessage && (
+            <div className="p-3.5 rounded-2xl bg-rose-50 dark:bg-rose-950/60 border border-rose-200 dark:border-rose-800 text-rose-800 dark:text-rose-200 text-xs sm:text-sm font-bold flex items-center gap-2 animate-in fade-in">
+              <span className="w-4 h-4 text-rose-600 font-bold shrink-0">⚠️</span>
+              <span>{exportErrorMessage}</span>
+            </div>
+          )}
+
           {/* Section: Objectives */}
           <div className="bg-emerald-50/50 dark:bg-emerald-950/20 rounded-2xl p-4 sm:p-5 border border-emerald-100 dark:border-emerald-900/40">
             <h3 className="text-xs font-black tracking-wider text-emerald-800 dark:text-emerald-300 uppercase mb-2.5 flex items-center gap-2">

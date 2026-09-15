@@ -321,11 +321,13 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
   const [isExportingPdf, setIsExportingPdf] = useState(false);
   const [isExportingWord, setIsExportingWord] = useState(false);
   const [exportSuccessMessage, setExportSuccessMessage] = useState<string | null>(null);
+  const [exportErrorMessage, setExportErrorMessage] = useState<string | null>(null);
 
   // PDF export handler
   const handleExportPdf = async () => {
     if (isExportingPdf) return;
     setIsExportingPdf(true);
+    setExportErrorMessage(null);
     try {
       let filename = 'OstadDZ_Taqrir';
       let orientation: 'portrait' | 'landscape' = 'portrait';
@@ -342,9 +344,10 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
       await exportElementToPdf('printable-report-container', filename, { orientation });
       setExportSuccessMessage('تم تصدير ملف PDF بنجاح وحفظه في جهازك');
       setTimeout(() => setExportSuccessMessage(null), 4000);
-    } catch (err) {
+    } catch (err: any) {
       console.error('Failed to export PDF:', err);
-      window.print();
+      setExportErrorMessage(err?.message || 'تعذر تصدير ملف PDF، يرجى إعادة المحاولة.');
+      setTimeout(() => setExportErrorMessage(null), 6000);
     } finally {
       setIsExportingPdf(false);
     }
@@ -541,6 +544,14 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
           <div className="p-3.5 rounded-2xl bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200 dark:border-emerald-800 text-emerald-800 dark:text-emerald-200 text-xs sm:text-sm font-bold flex items-center gap-2 animate-in fade-in slide-in-from-top-2">
             <CheckCircle2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
             <span>{exportSuccessMessage}</span>
+          </div>
+        )}
+
+        {/* Error Alert Banner */}
+        {exportErrorMessage && (
+          <div className="p-3.5 rounded-2xl bg-rose-50 dark:bg-rose-950/60 border border-rose-200 dark:border-rose-800 text-rose-800 dark:text-rose-200 text-xs sm:text-sm font-bold flex items-center gap-2 animate-in fade-in slide-in-from-top-2">
+            <span className="w-4 h-4 text-rose-600 dark:text-rose-400 font-bold shrink-0">⚠️</span>
+            <span>{exportErrorMessage}</span>
           </div>
         )}
 

@@ -4,7 +4,7 @@
  */
 
 const DB_NAME = 'ostad_dz_db';
-const DB_VERSION = 8;
+const DB_VERSION = 9;
 
 export const STORES = {
   CLASSES: 'classes',
@@ -18,6 +18,8 @@ export const STORES = {
   LIBRARY: 'library_items',
   LIBRARY_FILES: 'library_files',
   REMINDERS: 'reminders',
+  RANDOM_DRAWS: 'random_draws',
+  RANDOM_DRAW_STATES: 'random_draw_states',
 } as const;
 
 let dbInstance: IDBDatabase | null = null;
@@ -128,6 +130,19 @@ export function openDatabase(): Promise<IDBDatabase> {
         reminderStore.createIndex('isCompleted', 'isCompleted', { unique: false });
         reminderStore.createIndex('classId', 'classId', { unique: false });
         reminderStore.createIndex('createdAt', 'createdAt', { unique: false });
+      }
+
+      // 12. Random Draws History Store (سجل القرعات العشوائية)
+      if (!db.objectStoreNames.contains(STORES.RANDOM_DRAWS)) {
+        const drawStore = db.createObjectStore(STORES.RANDOM_DRAWS, { keyPath: 'id' });
+        drawStore.createIndex('classId', 'classId', { unique: false });
+        drawStore.createIndex('studentId', 'studentId', { unique: false });
+        drawStore.createIndex('timestamp', 'timestamp', { unique: false });
+      }
+
+      // 13. Random Draw Class States (حالة القرعة لكل قسم ومنع التكرار والاستثناءات)
+      if (!db.objectStoreNames.contains(STORES.RANDOM_DRAW_STATES)) {
+        db.createObjectStore(STORES.RANDOM_DRAW_STATES, { keyPath: 'classId' });
       }
     };
 

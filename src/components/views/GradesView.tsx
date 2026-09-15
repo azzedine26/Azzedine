@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { 
   Award, 
   Plus, 
@@ -35,7 +35,9 @@ import {
   Trimester, 
   CalculationFormula, 
   TeacherProfile,
-  SubjectSetting 
+  SubjectSetting,
+  SubjectCalculationMethodType,
+  StudentScoreRecord
 } from '../../types';
 import { 
   ASSESSMENT_TYPE_INFO, 
@@ -47,9 +49,10 @@ import {
   SubjectCalculationDetailResult 
 } from '../../utils/gradeCalculations';
 import { StudentSubjectBreakdownModal } from '../modals/StudentSubjectBreakdownModal';
-import { getSubjectsForGradeAndStage } from '../../data/algerianData';
+import { getSubjectsForGradeAndStage, SUBJECT_CALCULATION_METHODS } from '../../data/algerianData';
 import { exportGradesSheetDocx } from '../../utils/docxService';
 import { exportElementToPdf, exportGradesSheetPdf } from '../../utils/pdfService';
+import { databaseService } from '../../db/databaseService';
 
 interface GradesViewProps {
   assessments: AssessmentItem[];
@@ -64,6 +67,9 @@ interface GradesViewProps {
   onNavigateToClasses: () => void;
   onOpenAddSubject?: () => void;
   onOpenEditSubject?: (subject: SubjectSetting) => void;
+  onSaveGrades?: (assessmentId: string, grades: Record<string, StudentScoreRecord>) => Promise<void> | void;
+  onSaveAssessment?: (assessment: AssessmentItem) => Promise<void> | void;
+  onSaveSubjectSetting?: (setting: SubjectSetting) => Promise<void> | void;
 }
 
 export const GradesView: React.FC<GradesViewProps> = ({
@@ -79,11 +85,14 @@ export const GradesView: React.FC<GradesViewProps> = ({
   onNavigateToClasses,
   onOpenAddSubject,
   onOpenEditSubject,
+  onSaveGrades,
+  onSaveAssessment,
+  onSaveSubjectSetting,
 }) => {
   // Selected class
   const [selectedClassId, setSelectedClassId] = useState<string>(classes[0]?.id || '');
   // Filters
-  const [selectedTrimester, setSelectedTrimester] = useState<Trimester | 'ALL'>('ALL');
+  const [selectedTrimester, setSelectedTrimester] = useState<Trimester | 'ALL'>('T1');
   const [selectedType, setSelectedType] = useState<AssessmentType | 'ALL'>('ALL');
   const [selectedSubject, setSelectedSubject] = useState<string>('ALL');
   const [searchStudent, setSearchStudent] = useState<string>('');
@@ -96,15 +105,17 @@ export const GradesView: React.FC<GradesViewProps> = ({
   const [isExportingPdf, setIsExportingPdf] = useState<boolean>(false);
   const [isExportingWord, setIsExportingWord] = useState<boolean>(false);
   const [exportSuccessMessage, setExportSuccessMessage] = useState<string | null>(null);
+  const [exportErrorMessage, setExportErrorMessage] = useState<string | null>(null);
 
   // PDF Export Handler
   const handleExportGradesPdf = async () => {
     if (!activeClass || isExportingPdf) return;
     setIsExportingPdf(true);
+    setExportErrorMessage(null);
     try {
       const filename = `OstadDZ_Kashf_Noqat_${activeClass.name}_${selectedTrimester}`;
       const printableEl = document.getElementById('printable-deliberation-sheet');
-      if (printableEl) {
+      if (printableEl && isPrintPreviewOpen) {
         await exportElementToPdf(printableEl, filename, { orientation: 'landscape' });
       } else {
         await exportGradesSheetPdf(
@@ -113,14 +124,15 @@ export const GradesView: React.FC<GradesViewProps> = ({
           classStudents,
           selectedTrimester,
           profile,
-          currentSubjectSetting || undefined
+          effectiveSubjectSetting || undefined
         );
       }
-      setExportSuccessMessage('تم تصدير كشف النقاط كملف PDF بنجاح');
+      setExportSuccessMessage('تم تصدير كشف النقاط كملف PDF بنجاح وحفظه في جهازك');
       setTimeout(() => setExportSuccessMessage(null), 4000);
-    } catch (err) {
+    } catch (err: any) {
       console.error('Failed to export PDF:', err);
-      window.print();
+      setExportErrorMessage(err?.message || 'تعذر تصدير كشف النقاط كملف PDF، يرجى إعادة المحاولة.');
+      setTimeout(() => setExportErrorMessage(null), 6000);
     } finally {
       setIsExportingPdf(false);
     }
@@ -137,7 +149,7 @@ export const GradesView: React.FC<GradesViewProps> = ({
         classStudents,
         selectedTrimester,
         profile,
-        currentSubjectSetting || undefined
+        effectiveSubjectSetting || undefined
       );
       setExportSuccessMessage('تم تصدير كشف النقاط كملف Word (.docx) قابل للتعديل بنجاح');
       setTimeout(() => setExportSuccessMessage(null), 4000);
@@ -159,6 +171,30 @@ export const GradesView: React.FC<GradesViewProps> = ({
     return classes.find((c) => c.id === selectedClassId) || classes[0] || null;
   }, [classes, selectedClassId]);
 
+  // Local state for instant optimistic updates and offline reactivity
+  const [localAssessments, setLocalAssessments] = useState<AssessmentItem[]>(assessments);
+  const [localSubjectSettings, setLocalSubjectSettings] = useState<SubjectSetting[]>(subjectSettings);
+
+  useEffect(() => {
+    setLocalAssessments(assessments);
+  }, [assessments]);
+
+  useEffect(() => {
+    let isMounted = true;
+    databaseService.cleanupDuplicateAssessments().then((cleaned) => {
+      if (isMounted && cleaned && cleaned.length > 0) {
+        setLocalAssessments(cleaned);
+      }
+    });
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    setLocalSubjectSettings(subjectSettings);
+  }, [subjectSettings]);
+
   // Students in selected class
   const classStudents = useMemo(() => {
     if (!activeClass) return [];
@@ -167,13 +203,59 @@ export const GradesView: React.FC<GradesViewProps> = ({
       .sort((a, b) => a.lastName.localeCompare(b.lastName, 'ar'));
   }, [students, activeClass]);
 
-  // Assessments for selected class
+  // Assessments for selected class (strictly deduplicated and unified per category/trimester/subject)
   const classAssessments = useMemo(() => {
     if (!activeClass) return [];
-    return assessments
-      .filter((a) => a.classId === activeClass.id)
-      .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
-  }, [assessments, activeClass]);
+    const map = new Map<string, AssessmentItem>();
+    
+    for (const a of localAssessments) {
+      if (a.classId !== activeClass.id) continue;
+      let cat: 'continuous' | 'test1' | 'test2' | 'exam' | string = a.type;
+      if (a.type === 'test') {
+        const l = (a.title || '').toLowerCase();
+        cat = (l.includes('2') || l.includes('ثان') || l.includes('ثاني')) ? 'test2' : 'test1';
+      } else if (a.type === 'continuous' || (a.title || '').includes('تقويم')) {
+        cat = 'continuous';
+      }
+      
+      const itemSubj = (a.subject || '').trim().toLowerCase();
+      const key = `${a.classId}_${a.trimester}_${cat}_${itemSubj}`;
+      const catTitle =
+        cat === 'continuous'
+          ? 'التقويم'
+          : cat === 'test1'
+          ? 'الفرض الأول'
+          : cat === 'test2'
+          ? 'الفرض الثاني'
+          : cat === 'exam'
+          ? 'اختبار الفصل'
+          : a.title;
+
+      if (!map.has(key)) {
+        map.set(key, {
+          ...a,
+          type: cat as any,
+          title: catTitle,
+          coefficient: cat === 'exam' ? 2 : 1,
+          grades: { ...(a.grades || {}) },
+        });
+      } else {
+        const existing = map.get(key)!;
+        const mergedGrades = { ...(existing.grades || {}), ...(a.grades || {}) };
+        const isNewer = (a.updatedAt || a.createdAt || 0) >= (existing.updatedAt || existing.createdAt || 0);
+        const base = isNewer ? a : existing;
+        map.set(key, {
+          ...base,
+          type: cat as any,
+          title: catTitle,
+          coefficient: cat === 'exam' ? 2 : 1,
+          grades: mergedGrades,
+        });
+      }
+    }
+
+    return Array.from(map.values()).sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+  }, [localAssessments, activeClass]);
 
   // Available subjects for selected class
   const availableSubjects = useMemo(() => {
@@ -183,11 +265,11 @@ export const GradesView: React.FC<GradesViewProps> = ({
       if (profile.subject?.trim()) set.add(profile.subject.trim());
       const gradeSubs = getSubjectsForGradeAndStage(activeClass.stage, activeClass.grade, [activeClass.subject]);
       gradeSubs.forEach((s) => set.add(s));
-      subjectSettings.forEach((s) => {
+      localSubjectSettings.forEach((s) => {
         if (s.name?.trim()) set.add(s.name.trim());
       });
     } else {
-      subjectSettings.forEach((s) => {
+      localSubjectSettings.forEach((s) => {
         if (s.name?.trim()) set.add(s.name.trim());
       });
       if (profile.subject?.trim()) {
@@ -198,7 +280,7 @@ export const GradesView: React.FC<GradesViewProps> = ({
       if (a.subject?.trim()) set.add(a.subject.trim());
     });
     return Array.from(set);
-  }, [activeClass, classAssessments, subjectSettings, profile.subject]);
+  }, [activeClass, classAssessments, localSubjectSettings, profile.subject]);
 
   // Active Subject Name
   const activeSubjectName = useMemo(() => {
@@ -206,33 +288,411 @@ export const GradesView: React.FC<GradesViewProps> = ({
     return availableSubjects[0] || profile.subject || 'المادة';
   }, [selectedSubject, availableSubjects, profile.subject]);
 
-  // Matched Subject Setting (with single coefficient and calculation method)
+  // Matched Subject Setting (with single coefficient and calculation method for whole subject)
   const currentSubjectSetting = useMemo(() => {
     const target = (activeSubjectName || '').trim().toLowerCase();
     return (
-      subjectSettings.find(
+      localSubjectSettings.find(
         (s) => (s?.name || '').trim().toLowerCase() === target
       ) || null
     );
-  }, [subjectSettings, activeSubjectName]);
+  }, [localSubjectSettings, activeSubjectName]);
 
-  // Filtered assessments according to trimester, type, and subject
+  const [coeffInput, setCoeffInput] = useState<string>(() => {
+    const target = (activeSubjectName || '').trim().toLowerCase();
+    const found = localSubjectSettings.find(
+      (s) => (s?.name || '').trim().toLowerCase() === target
+    );
+    if (found && typeof found.coefficient === 'number' && !isNaN(found.coefficient)) {
+      return String(found.coefficient);
+    }
+    return '2';
+  });
+
+  // Keep track of active subject to update coeffInput when subject switches
+  const prevSubjectRef = useRef<string>(activeSubjectName);
+  useEffect(() => {
+    if (prevSubjectRef.current !== activeSubjectName) {
+      prevSubjectRef.current = activeSubjectName;
+      const target = (activeSubjectName || '').trim().toLowerCase();
+      const match = localSubjectSettings.find(
+        (s) => (s?.name || '').trim().toLowerCase() === target
+      );
+      if (match && typeof match.coefficient === 'number' && !isNaN(match.coefficient)) {
+        setCoeffInput(String(match.coefficient));
+      } else {
+        setCoeffInput('2');
+      }
+    }
+  }, [activeSubjectName, localSubjectSettings]);
+
+  // Live Effective Subject Setting:
+  // Dynamically constructed from live coeffInput and selected calculation method.
+  // Guarantees zero-lag instantaneous recalculation across the entire page!
+  const effectiveSubjectSetting = useMemo<SubjectSetting>(() => {
+    const target = (activeSubjectName || '').trim().toLowerCase();
+    const existing = localSubjectSettings.find(
+      (s) => (s?.name || '').trim().toLowerCase() === target
+    );
+
+    let parsedCoeff: number | null = null;
+    const trimmed = coeffInput.trim();
+    if (trimmed !== '') {
+      const num = parseFloat(trimmed);
+      if (!isNaN(num) && num >= 0) {
+        parsedCoeff = Math.min(10, num);
+      }
+    }
+
+    const currentMethod = existing?.calculationMethod?.method || 'tests_avg_plus_exam_x2_div_3';
+
+    return {
+      id: existing?.id || `subj-setting-${activeSubjectName.trim().replace(/\s+/g, '_')}`,
+      name: activeSubjectName,
+      coefficient: parsedCoeff as any,
+      calculationMethod: existing?.calculationMethod || {
+        method: currentMethod,
+        customTest1Weight: 1,
+        customTest2Weight: 1,
+        customExamWeight: 2,
+        description: SUBJECT_CALCULATION_METHODS.find((m) => m.id === currentMethod)?.formula || '',
+      },
+      createdAt: existing?.createdAt || Date.now(),
+      updatedAt: Date.now(),
+    };
+  }, [localSubjectSettings, activeSubjectName, coeffInput]);
+
+  // Handlers for subject coefficient & calculation method
+  const handleSubjectCoeffChange = async (newCoeffRaw: string | number) => {
+    let parsedCoeff: number | null = null;
+    if (typeof newCoeffRaw === 'number') {
+      if (!isNaN(newCoeffRaw) && newCoeffRaw >= 0) {
+        parsedCoeff = Math.min(10, newCoeffRaw);
+      }
+    } else if (typeof newCoeffRaw === 'string') {
+      const trimmed = newCoeffRaw.trim();
+      if (trimmed !== '') {
+        const num = parseFloat(trimmed);
+        if (!isNaN(num) && num >= 0) {
+          parsedCoeff = Math.min(10, num);
+        }
+      }
+    }
+
+    const currentMethod = effectiveSubjectSetting?.calculationMethod?.method || 'tests_avg_plus_exam_x2_div_3';
+    
+    const updatedSetting: SubjectSetting = {
+      id: currentSubjectSetting?.id || `subj-setting-${activeSubjectName.trim().replace(/\s+/g, '_')}`,
+      name: activeSubjectName,
+      coefficient: parsedCoeff as any,
+      calculationMethod: currentSubjectSetting?.calculationMethod || {
+        method: currentMethod,
+        customTest1Weight: 1,
+        customTest2Weight: 1,
+        customExamWeight: 2,
+        description: SUBJECT_CALCULATION_METHODS.find((m) => m.id === currentMethod)?.formula || '',
+      },
+      createdAt: currentSubjectSetting?.createdAt || Date.now(),
+      updatedAt: Date.now(),
+    };
+
+    setLocalSubjectSettings((prev) => {
+      const idx = prev.findIndex((s) => s.name.trim().toLowerCase() === activeSubjectName.trim().toLowerCase());
+      if (idx >= 0) {
+        const copy = [...prev];
+        copy[idx] = updatedSetting;
+        return copy;
+      }
+      return [...prev, updatedSetting];
+    });
+
+    await databaseService.saveSubjectSetting(updatedSetting);
+    if (onSaveSubjectSetting) {
+      await onSaveSubjectSetting(updatedSetting);
+    }
+  };
+
+  const handleCalculationMethodChange = async (newMethod: SubjectCalculationMethodType) => {
+    const coeff = effectiveSubjectSetting?.coefficient ?? 2;
+    
+    const updatedSetting: SubjectSetting = {
+      id: currentSubjectSetting?.id || `subj-setting-${activeSubjectName.trim().replace(/\s+/g, '_')}`,
+      name: activeSubjectName,
+      coefficient: coeff as any,
+      calculationMethod: {
+        method: newMethod,
+        customTest1Weight: 1,
+        customTest2Weight: 1,
+        customExamWeight: 2,
+        description: SUBJECT_CALCULATION_METHODS.find((m) => m.id === newMethod)?.formula || '',
+      },
+      createdAt: currentSubjectSetting?.createdAt || Date.now(),
+      updatedAt: Date.now(),
+    };
+
+    setLocalSubjectSettings((prev) => {
+      const idx = prev.findIndex((s) => s.name.trim().toLowerCase() === activeSubjectName.trim().toLowerCase());
+      if (idx >= 0) {
+        const copy = [...prev];
+        copy[idx] = updatedSetting;
+        return copy;
+      }
+      return [...prev, updatedSetting];
+    });
+
+    await databaseService.saveSubjectSetting(updatedSetting);
+    if (onSaveSubjectSetting) {
+      await onSaveSubjectSetting(updatedSetting);
+    }
+  };
+
+  // Dedicated canonical assessments for التقويم, الفرض الأول, الفرض الثاني, and الاختبار
+  const continuousAssessment = useMemo(() => {
+    if (!activeClass) return null;
+    const matches = localAssessments.filter((a) => {
+      const matchClass = a.classId === activeClass.id;
+      const matchTrimester = selectedTrimester === 'ALL' || a.trimester === selectedTrimester;
+      const matchSubject = selectedSubject === 'ALL' || !a.subject || (a.subject || '').trim() === selectedSubject.trim();
+      const isContinuous = a.type === 'continuous' || (a.title || '').includes('تقويم');
+      return matchClass && matchTrimester && matchSubject && isContinuous;
+    });
+
+    if (matches.length === 0) return null;
+    const sorted = [...matches].sort((a, b) => (b.updatedAt || b.createdAt || 0) - (a.updatedAt || a.createdAt || 0));
+    const mergedGrades: Record<string, StudentScoreRecord> = {};
+    for (const m of matches) {
+      if (m.grades) {
+        const entries = Object.entries(m.grades) as [string, StudentScoreRecord][];
+        for (const [stId, rec] of entries) {
+          if (rec && (rec.score !== undefined || rec.isAbsent)) {
+            if (!mergedGrades[stId] || (m.updatedAt || 0) >= (sorted[0].updatedAt || 0)) {
+              mergedGrades[stId] = rec;
+            }
+          }
+        }
+      }
+    }
+    return { ...sorted[0], type: 'continuous' as const, title: 'التقويم', grades: mergedGrades };
+  }, [localAssessments, selectedTrimester, selectedSubject, activeClass?.id]);
+
+  const test1Assessment = useMemo(() => {
+    if (!activeClass) return null;
+    const matches = localAssessments.filter((a) => {
+      const matchClass = a.classId === activeClass.id;
+      const matchTrimester = selectedTrimester === 'ALL' || a.trimester === selectedTrimester;
+      const matchSubject = selectedSubject === 'ALL' || !a.subject || (a.subject || '').trim() === selectedSubject.trim();
+      const isTest1 = a.type === 'test1' || (a.type === 'test' && !a.title.includes('2') && !a.title.includes('ثان') && !a.title.includes('ثاني'));
+      return matchClass && matchTrimester && matchSubject && isTest1;
+    });
+
+    if (matches.length === 0) return null;
+    const sorted = [...matches].sort((a, b) => (b.updatedAt || b.createdAt || 0) - (a.updatedAt || a.createdAt || 0));
+    const mergedGrades: Record<string, StudentScoreRecord> = {};
+    for (const m of matches) {
+      if (m.grades) {
+        const entries = Object.entries(m.grades) as [string, StudentScoreRecord][];
+        for (const [stId, rec] of entries) {
+          if (rec && (rec.score !== undefined || rec.isAbsent)) {
+            if (!mergedGrades[stId] || (m.updatedAt || 0) >= (sorted[0].updatedAt || 0)) {
+              mergedGrades[stId] = rec;
+            }
+          }
+        }
+      }
+    }
+    return { ...sorted[0], type: 'test1' as const, title: 'الفرض الأول', grades: mergedGrades };
+  }, [localAssessments, selectedTrimester, selectedSubject, activeClass?.id]);
+
+  const test2Assessment = useMemo(() => {
+    if (!activeClass) return null;
+    const matches = localAssessments.filter((a) => {
+      const matchClass = a.classId === activeClass.id;
+      const matchTrimester = selectedTrimester === 'ALL' || a.trimester === selectedTrimester;
+      const matchSubject = selectedSubject === 'ALL' || !a.subject || (a.subject || '').trim() === selectedSubject.trim();
+      const isTest2 = a.type === 'test2' || (a.type === 'test' && (a.title.includes('2') || a.title.includes('ثان') || a.title.includes('ثاني')));
+      return matchClass && matchTrimester && matchSubject && isTest2;
+    });
+
+    if (matches.length === 0) return null;
+    const sorted = [...matches].sort((a, b) => (b.updatedAt || b.createdAt || 0) - (a.updatedAt || a.createdAt || 0));
+    const mergedGrades: Record<string, StudentScoreRecord> = {};
+    for (const m of matches) {
+      if (m.grades) {
+        const entries = Object.entries(m.grades) as [string, StudentScoreRecord][];
+        for (const [stId, rec] of entries) {
+          if (rec && (rec.score !== undefined || rec.isAbsent)) {
+            if (!mergedGrades[stId] || (m.updatedAt || 0) >= (sorted[0].updatedAt || 0)) {
+              mergedGrades[stId] = rec;
+            }
+          }
+        }
+      }
+    }
+    return { ...sorted[0], type: 'test2' as const, title: 'الفرض الثاني', grades: mergedGrades };
+  }, [localAssessments, selectedTrimester, selectedSubject, activeClass?.id]);
+
+  const examAssessment = useMemo(() => {
+    if (!activeClass) return null;
+    const matches = localAssessments.filter((a) => {
+      const matchClass = a.classId === activeClass.id;
+      const matchTrimester = selectedTrimester === 'ALL' || a.trimester === selectedTrimester;
+      const matchSubject = selectedSubject === 'ALL' || !a.subject || (a.subject || '').trim() === selectedSubject.trim();
+      const isExam = a.type === 'exam' || (a.title || '').includes('اختبار');
+      return matchClass && matchTrimester && matchSubject && isExam;
+    });
+
+    if (matches.length === 0) return null;
+    const sorted = [...matches].sort((a, b) => (b.updatedAt || b.createdAt || 0) - (a.updatedAt || a.createdAt || 0));
+    const mergedGrades: Record<string, StudentScoreRecord> = {};
+    for (const m of matches) {
+      if (m.grades) {
+        const entries = Object.entries(m.grades) as [string, StudentScoreRecord][];
+        for (const [stId, rec] of entries) {
+          if (rec && (rec.score !== undefined || rec.isAbsent)) {
+            if (!mergedGrades[stId] || (m.updatedAt || 0) >= (sorted[0].updatedAt || 0)) {
+              mergedGrades[stId] = rec;
+            }
+          }
+        }
+      }
+    }
+    return { ...sorted[0], type: 'exam' as const, title: 'اختبار الفصل', grades: mergedGrades };
+  }, [localAssessments, selectedTrimester, selectedSubject, activeClass?.id]);
+
+  // Canonical assessments list for grading calculations
+  const canonicalAssessments = useMemo(() => {
+    const list: AssessmentItem[] = [];
+    if (continuousAssessment) list.push(continuousAssessment);
+    if (test1Assessment) list.push(test1Assessment);
+    if (test2Assessment) list.push(test2Assessment);
+    if (examAssessment) list.push(examAssessment);
+    return list;
+  }, [continuousAssessment, test1Assessment, test2Assessment, examAssessment]);
+
+  // Filtered assessments according to trimester, type, and subject (for card view and assessments view)
   const filteredAssessments = useMemo(() => {
     return classAssessments.filter((a) => {
       const matchTrimester = selectedTrimester === 'ALL' || a.trimester === selectedTrimester;
       const matchType =
         selectedType === 'ALL' ||
         a.type === selectedType ||
-        (selectedType === 'test1' && a.type === 'test');
+        (selectedType === 'test1' && (a.type === 'test1' || a.type === 'test'));
       const matchSubject = selectedSubject === 'ALL' || (a.subject || '').trim() === selectedSubject.trim();
       return matchTrimester && matchType && matchSubject;
     });
   }, [classAssessments, selectedTrimester, selectedType, selectedSubject]);
 
-  // Comprehensive report for class with chosen assessments, formula, and subject setting
+  // Score retrieval and direct entry helpers
+  const getStudentScoreValue = (studentId: string, category: 'continuous' | 'test1' | 'test2' | 'exam'): string | number => {
+    const assess =
+      category === 'continuous'
+        ? continuousAssessment
+        : category === 'test1'
+        ? test1Assessment
+        : category === 'test2'
+        ? test2Assessment
+        : examAssessment;
+    if (!assess || !assess.grades) return '';
+    const record = assess.grades[studentId];
+    if (!record || record.isAbsent) return '';
+    if (typeof record.score !== 'number' || isNaN(record.score)) return '';
+    return record.score;
+  };
+
+  const handleDirectScoreInput = async (studentId: string, category: 'continuous' | 'test1' | 'test2' | 'exam', rawVal: string) => {
+    if (!activeClass) return;
+    let targetAssessment =
+      category === 'continuous'
+        ? continuousAssessment
+        : category === 'test1'
+        ? test1Assessment
+        : category === 'test2'
+        ? test2Assessment
+        : examAssessment;
+    const effectiveTrimester: Trimester = selectedTrimester !== 'ALL' ? selectedTrimester : 'T1';
+
+    if (!targetAssessment) {
+      const newAssessment: AssessmentItem = {
+        id: `assess-${category}-${activeClass.id}-${effectiveTrimester}-${activeSubjectName.replace(/\s+/g, '_')}`,
+        title:
+          category === 'continuous'
+            ? 'التقويم'
+            : category === 'test1'
+            ? 'الفرض الأول'
+            : category === 'test2'
+            ? 'الفرض الثاني'
+            : 'اختبار الفصل',
+        type: category,
+        classId: activeClass.id,
+        className: activeClass.name,
+        subject: activeSubjectName,
+        trimester: effectiveTrimester,
+        date: new Date().toISOString().slice(0, 10),
+        coefficient: 1, // assessments have no individual coefficient
+        maxScore: 20,
+        grades: {},
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+      };
+      await databaseService.addAssessment(newAssessment);
+      if (onSaveAssessment) {
+        await onSaveAssessment(newAssessment);
+      }
+      targetAssessment = newAssessment;
+    }
+
+    const updatedGrades: Record<string, StudentScoreRecord> = { ...(targetAssessment.grades || {}) };
+
+    if (rawVal.trim() === '') {
+      delete updatedGrades[studentId];
+    } else {
+      const parsed = parseFloat(rawVal);
+      if (!isNaN(parsed)) {
+        const num = Math.max(0, Math.min(20, parsed));
+        updatedGrades[studentId] = {
+          score: num,
+          isAbsent: false,
+        };
+      } else {
+        delete updatedGrades[studentId];
+      }
+    }
+
+    const updatedAssessment: AssessmentItem = {
+      ...targetAssessment,
+      grades: updatedGrades,
+      updatedAt: Date.now(),
+    };
+
+    setLocalAssessments((prev) => {
+      const cleaned = prev.filter((a) => {
+        if (a.id === updatedAssessment.id) return false;
+        if (a.classId !== activeClass.id) return true;
+        if (a.trimester !== effectiveTrimester) return true;
+        const subjMatches = !a.subject || !activeSubjectName || a.subject.trim() === activeSubjectName.trim();
+        if (!subjMatches) return true;
+        let aCat = a.type;
+        if (a.type === 'test') {
+          const l = (a.title || '').toLowerCase();
+          aCat = (l.includes('2') || l.includes('ثان') || l.includes('ثاني')) ? 'test2' : 'test1';
+        } else if (a.type === 'continuous' || (a.title || '').includes('تقويم')) {
+          aCat = 'continuous';
+        }
+        return aCat !== category;
+      });
+      return [...cleaned, updatedAssessment];
+    });
+
+    await databaseService.saveBatchGrades(updatedAssessment.id, updatedGrades);
+    if (onSaveGrades) {
+      await onSaveGrades(updatedAssessment.id, updatedGrades);
+    }
+  };
+
+  // Comprehensive report for class with canonical assessments, formula, and subject setting
   const gradesReport = useMemo(() => {
-    return computeClassGradesReport(classStudents, filteredAssessments, formula, currentSubjectSetting);
-  }, [classStudents, filteredAssessments, formula, currentSubjectSetting]);
+    return computeClassGradesReport(classStudents, canonicalAssessments, formula, effectiveSubjectSetting);
+  }, [classStudents, canonicalAssessments, formula, effectiveSubjectSetting]);
 
   // Filter student rows by search query
   const displayedStudentResults = useMemo(() => {
@@ -244,6 +704,57 @@ export const GradesView: React.FC<GradesViewProps> = ({
       return name.includes(query) || num.includes(query);
     });
   }, [gradesReport.studentResults, searchStudent]);
+
+  // Column visibility flags and averages
+  const showContinuousCol = selectedType === 'ALL' || selectedType === 'continuous';
+  const showTest1Col = selectedType === 'ALL' || selectedType === 'test1';
+  const showTest2Col = selectedType === 'ALL' || selectedType === 'test2';
+  const showExamCol = selectedType === 'ALL' || selectedType === 'exam';
+  const showAverageCol = selectedType === 'ALL' || selectedType === 'exam';
+  const showAppraisalAndRankCol = selectedType === 'ALL';
+  const totalAssessmentCols =
+    (showContinuousCol ? 1 : 0) +
+    (showTest1Col ? 1 : 0) +
+    (showTest2Col ? 1 : 0) +
+    (showExamCol ? 1 : 0) +
+    (showAverageCol ? 1 : 0) +
+    (showAppraisalAndRankCol ? 2 : 0);
+
+  const continuousAvg = useMemo(() => {
+    if (!continuousAssessment?.grades) return null;
+    const vals = (Object.values(continuousAssessment.grades) as StudentScoreRecord[])
+      .filter((g) => !g.isAbsent && typeof g.score === 'number' && !isNaN(g.score))
+      .map((g) => g.score as number);
+    if (vals.length === 0) return null;
+    return (vals.reduce((a, b) => a + b, 0) / vals.length).toFixed(2);
+  }, [continuousAssessment]);
+
+  const test1Avg = useMemo(() => {
+    if (!test1Assessment?.grades) return null;
+    const vals = (Object.values(test1Assessment.grades) as StudentScoreRecord[])
+      .filter((g) => !g.isAbsent && typeof g.score === 'number' && !isNaN(g.score))
+      .map((g) => g.score as number);
+    if (vals.length === 0) return null;
+    return (vals.reduce((a, b) => a + b, 0) / vals.length).toFixed(2);
+  }, [test1Assessment]);
+
+  const test2Avg = useMemo(() => {
+    if (!test2Assessment?.grades) return null;
+    const vals = (Object.values(test2Assessment.grades) as StudentScoreRecord[])
+      .filter((g) => !g.isAbsent && typeof g.score === 'number' && !isNaN(g.score))
+      .map((g) => g.score as number);
+    if (vals.length === 0) return null;
+    return (vals.reduce((a, b) => a + b, 0) / vals.length).toFixed(2);
+  }, [test2Assessment]);
+
+  const examAvg = useMemo(() => {
+    if (!examAssessment?.grades) return null;
+    const vals = (Object.values(examAssessment.grades) as StudentScoreRecord[])
+      .filter((g) => !g.isAbsent && typeof g.score === 'number' && !isNaN(g.score))
+      .map((g) => g.score as number);
+    if (vals.length === 0) return null;
+    return (vals.reduce((a, b) => a + b, 0) / vals.length).toFixed(2);
+  }, [examAssessment]);
 
   if (classes.length === 0) {
     return (
@@ -285,7 +796,7 @@ export const GradesView: React.FC<GradesViewProps> = ({
               </span>
             </div>
             <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-0.5">
-              رصد نقاط الفروض والاختبارات وحساب المعدلات الفردية والجماعية بدون إنترنت
+              رصد نقاط الفروض والاختبارات وحساب المعدلات الفردية والجماعية بدقة
             </p>
           </div>
         </div>
@@ -341,6 +852,21 @@ export const GradesView: React.FC<GradesViewProps> = ({
           </button>
         </div>
       </div>
+
+      {/* Notifications / Alerts */}
+      {exportSuccessMessage && (
+        <div className="p-3.5 rounded-2xl bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200 dark:border-emerald-800 text-emerald-800 dark:text-emerald-200 text-xs sm:text-sm font-bold flex items-center gap-2 animate-in fade-in slide-in-from-top-2">
+          <CheckCircle2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
+          <span>{exportSuccessMessage}</span>
+        </div>
+      )}
+
+      {exportErrorMessage && (
+        <div className="p-3.5 rounded-2xl bg-rose-50 dark:bg-rose-950/60 border border-rose-200 dark:border-rose-800 text-rose-800 dark:text-rose-200 text-xs sm:text-sm font-bold flex items-center gap-2 animate-in fade-in slide-in-from-top-2">
+          <span className="w-4 h-4 text-rose-600 dark:text-rose-400 font-bold shrink-0">⚠️</span>
+          <span>{exportErrorMessage}</span>
+        </div>
+      )}
 
       {/* 2. Class Selector Bar */}
       <div className="bg-white dark:bg-slate-900 p-3.5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs flex items-center gap-2 overflow-x-auto no-scrollbar">
@@ -558,16 +1084,6 @@ export const GradesView: React.FC<GradesViewProps> = ({
           {/* Trimester Tabs */}
           <div className="flex items-center gap-1 text-xs">
             <span className="text-slate-400 font-bold ml-1">الفصل:</span>
-            <button
-              onClick={() => setSelectedTrimester('ALL')}
-              className={`px-3 py-1 rounded-lg font-bold transition ${
-                selectedTrimester === 'ALL'
-                  ? 'bg-slate-900 dark:bg-white text-white dark:text-slate-900'
-                  : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
-              }`}
-            >
-              الكل
-            </button>
             {(Object.keys(TRIMESTER_INFO) as Trimester[]).map((tKey) => (
               <button
                 key={tKey}
@@ -612,69 +1128,97 @@ export const GradesView: React.FC<GradesViewProps> = ({
           </div>
         </div>
 
-        {/* Row 3: Subject Selection & Calculation Method (كيفية الحساب) Banner */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-3 border-t border-slate-100 dark:border-slate-800/80 bg-slate-50/70 dark:bg-slate-800/30 p-3 rounded-xl">
-          <div className="flex items-center gap-2 flex-wrap">
-            <div className="flex items-center gap-1.5 text-xs font-bold text-slate-700 dark:text-slate-300">
-              <BookOpen className="w-4 h-4 text-emerald-600" />
-              <span>المادة:</span>
+        {/* Row 3: Subject Selection, Subject Coefficient, & Calculation Method */}
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 pt-3 border-t border-slate-100 dark:border-slate-800/80 bg-slate-50/70 dark:bg-slate-800/30 p-3.5 rounded-2xl">
+          <div className="flex items-center gap-3 flex-wrap">
+            {/* Subject Selector */}
+            <div className="flex items-center gap-1.5 bg-white dark:bg-slate-900 px-2.5 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 shadow-2xs">
+              <BookOpen className="w-4 h-4 text-emerald-600 shrink-0" />
+              <label className="text-xs font-bold text-slate-700 dark:text-slate-300">المادة:</label>
+              <select
+                value={selectedSubject}
+                onChange={(e) => setSelectedSubject(e.target.value)}
+                className="h-7 px-2 rounded-lg bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white text-xs font-bold border border-slate-200 dark:border-slate-700 focus:outline-hidden focus:ring-1 focus:ring-emerald-500"
+              >
+                <option value="ALL">كل المواد في القسم</option>
+                {availableSubjects.map((subj) => (
+                  <option key={subj} value={subj}>
+                    {subj}
+                  </option>
+                ))}
+              </select>
             </div>
-            <select
-              value={selectedSubject}
-              onChange={(e) => setSelectedSubject(e.target.value)}
-              className="h-8 px-2.5 rounded-lg bg-white dark:bg-slate-900 text-slate-900 dark:text-white text-xs font-bold border border-slate-200 dark:border-slate-700 focus:outline-hidden focus:ring-1 focus:ring-emerald-500"
-            >
-              <option value="ALL">كل المواد في القسم</option>
-              {availableSubjects.map((subj) => (
-                <option key={subj} value={subj}>
-                  {subj}
-                </option>
-              ))}
-            </select>
 
-            {/* Subject Setting Info Badge */}
-            {currentSubjectSetting ? (
-              <div className="flex items-center gap-2 flex-wrap text-xs">
-                <span className="px-2 py-0.5 rounded-md bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300 font-bold">
-                  معامل المادة: {currentSubjectSetting.coefficient}
-                </span>
-                <span className="text-slate-400 font-normal">|</span>
-                <span className="text-[11px] font-mono text-emerald-700 dark:text-emerald-400 font-bold bg-white dark:bg-slate-900 px-2 py-0.5 rounded border border-emerald-200/80 dark:border-emerald-800 dir-ltr">
-                  {currentSubjectSetting.calculationMethod?.method === 'tests_avg_plus_exam_x2_div_3'
-                    ? '((ف1 + ف2)/2 + اخ×2)/3'
-                    : currentSubjectSetting.calculationMethod?.method === 'tests_sum_plus_exam_x2_div_4'
-                    ? '(ف1 + ف2 + اخ×2)/4'
-                    : currentSubjectSetting.calculationMethod?.method === 'best_test_plus_exam_x2_div_3'
-                    ? '(أفضل فرض + اخ×2)/3'
-                    : currentSubjectSetting.calculationMethod?.method === 'test1_only_plus_exam_x2_div_3'
-                    ? '(ف1 + اخ×2)/3'
-                    : currentSubjectSetting.calculationMethod?.method === 'arithmetic_mean'
-                    ? '(ف1 + ف2 + اخ)/3'
-                    : 'أوزان مخصصة'}
-                </span>
-              </div>
-            ) : (
-              <span className="text-[11px] text-slate-400">
-                (لم يتم ضبط إعداد مخصص لهذه المادة بعد)
+            {/* Subject Coefficient Field (حقل المعامل الخاص بالمادة) */}
+            <div className="flex items-center gap-2 bg-white dark:bg-slate-900 px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 shadow-2xs">
+              <label className="text-xs font-bold text-slate-700 dark:text-slate-300 whitespace-nowrap">
+                معامل المادة:
+              </label>
+              <input
+                type="number"
+                min="1"
+                max="10"
+                step="0.5"
+                placeholder="—"
+                value={coeffInput}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  setCoeffInput(val);
+                  handleSubjectCoeffChange(val);
+                }}
+                className="w-14 h-7 text-center font-black text-xs rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-emerald-700 dark:text-emerald-400 focus:outline-hidden focus:ring-2 focus:ring-emerald-500 font-mono"
+                title="معامل المادة كاملة فقط (لا يوجد معامل خاص بالفرض الأول أو الفرض الثاني)"
+              />
+              <span className="text-[10px] text-slate-400 hidden sm:inline">
+                (المعامل للمادة كاملة فقط)
               </span>
-            )}
+            </div>
+
+            {/* Calculation Method Field (حقل كيفية الحساب الموجود في الصفحة) */}
+            <div className="flex items-center gap-2 bg-white dark:bg-slate-900 px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 shadow-2xs">
+              <Calculator className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+              <label className="text-xs font-bold text-slate-700 dark:text-slate-300 whitespace-nowrap">
+                كيفية الحساب:
+              </label>
+              <select
+                value={effectiveSubjectSetting?.calculationMethod?.method || 'tests_avg_plus_exam_x2_div_3'}
+                onChange={(e) => handleCalculationMethodChange(e.target.value as SubjectCalculationMethodType)}
+                className="h-7 px-2 text-xs font-bold rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-hidden focus:ring-2 focus:ring-emerald-500 max-w-[260px] sm:max-w-none"
+              >
+                <option value="tests_avg_plus_exam_x2_div_3">
+                  ((ف1 + ف2) ÷ 2 + اختبار × 2) ÷ 3 — معدل الفرضين + الاختبار مضاعف
+                </option>
+                <option value="tests_sum_plus_exam_x2_div_4">
+                  (ف1 + ف2 + اختبار × 2) ÷ 4 — مجموع الفرضين + الاختبار مضاعف
+                </option>
+                <option value="best_test_plus_exam_x2_div_3">
+                  (أفضل فرض + اختبار × 2) ÷ 3 — الفرض الأعلى + الاختبار مضاعف
+                </option>
+                <option value="test1_only_plus_exam_x2_div_3">
+                  (فرض 1 فقط + اختبار × 2) ÷ 3 — فرض واحد واختبار
+                </option>
+                <option value="arithmetic_mean">
+                  (فرض 1 + فرض 2 + اختبار) ÷ 3 — المتوسط الحسابي البسيط
+                </option>
+              </select>
+            </div>
           </div>
 
           <div className="flex items-center gap-2 shrink-0">
-            {currentSubjectSetting && onOpenEditSubject ? (
+            {(currentSubjectSetting || effectiveSubjectSetting) && onOpenEditSubject ? (
               <button
                 type="button"
-                onClick={() => onOpenEditSubject(currentSubjectSetting)}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-50 dark:bg-emerald-950/60 hover:bg-emerald-100 dark:hover:bg-emerald-900 text-emerald-700 dark:text-emerald-300 text-xs font-bold border border-emerald-200 dark:border-emerald-800 transition"
+                onClick={() => onOpenEditSubject(effectiveSubjectSetting || currentSubjectSetting)}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-50 dark:bg-emerald-950/60 hover:bg-emerald-100 dark:hover:bg-emerald-900 text-emerald-700 dark:text-emerald-300 text-xs font-bold border border-emerald-200 dark:border-emerald-800 transition"
               >
                 <Sliders className="w-3.5 h-3.5" />
-                <span>تعديل كيفية الحساب / محاكي الناتج</span>
+                <span>محاكي وتفاصيل الحساب</span>
               </button>
             ) : onOpenAddSubject ? (
               <button
                 type="button"
                 onClick={onOpenAddSubject}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold transition shadow-xs"
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold transition shadow-xs"
               >
                 <Plus className="w-3.5 h-3.5" />
                 <span>إعداد مادة وطريقة حسابها</span>
@@ -749,7 +1293,11 @@ export const GradesView: React.FC<GradesViewProps> = ({
                         {assessment.title}
                       </h3>
                       <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                        المادة: {assessment.subject} • المعامل: {assessment.coefficient} • العلامة على: /{assessment.maxScore || 20}
+                        المادة: {assessment.subject}
+                        {assessment.type !== 'test1' && assessment.type !== 'test2' && assessment.type !== 'test' && (
+                          <span> • المعامل: {assessment.coefficient}</span>
+                        )}
+                        <span> • العلامة على: /{assessment.maxScore || 20}</span>
                       </p>
 
                       {assessment.notes && (
@@ -833,7 +1381,7 @@ export const GradesView: React.FC<GradesViewProps> = ({
                         <span className="font-black text-sm text-slate-900 dark:text-white">
                           {result.student.lastName} {result.student.firstName}
                         </span>
-                        {result.rank !== null && (
+                        {showAppraisalAndRankCol && result.rank !== null && (
                           <span className="text-[10px] font-bold px-1.5 py-0.2 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
                             المرتبة {result.rank}
                           </span>
@@ -845,36 +1393,38 @@ export const GradesView: React.FC<GradesViewProps> = ({
                       </p>
                     </div>
 
-                    {/* Average badge with breakdown link */}
-                    <div 
-                      className="text-left cursor-pointer group"
-                      onClick={() => {
-                        if (result.subjectCalculation) {
-                          setBreakdownModalData({
-                            student: result.student,
-                            calculationResult: result.subjectCalculation,
-                          });
-                        }
-                      }}
-                      title="انقر لعرض تفاصيل وخطوات كيفية الحساب"
-                    >
-                      <div className="flex items-center gap-1 justify-end">
-                        <span className={`text-lg font-black ${avg !== null && avg >= 10 ? 'text-emerald-600 dark:text-emerald-400' : avg !== null ? 'text-rose-600 dark:text-rose-400' : 'text-slate-400'}`}>
-                          {avg !== null ? `${avg}/20` : '—'}
-                        </span>
-                        {result.subjectCalculation && (
-                          <Calculator className="w-3.5 h-3.5 text-emerald-500 opacity-60 group-hover:opacity-100 transition" />
+                    {/* Average badge with breakdown link (فقط في الاختبار والكل) */}
+                    {showAverageCol && (
+                      <div 
+                        className="text-left cursor-pointer group"
+                        onClick={() => {
+                          if (result.subjectCalculation) {
+                            setBreakdownModalData({
+                              student: result.student,
+                              calculationResult: result.subjectCalculation,
+                            });
+                          }
+                        }}
+                        title="انقر لعرض تفاصيل وخطوات كيفية الحساب"
+                      >
+                        <div className="flex items-center gap-1 justify-end">
+                          <span className={`text-lg font-black ${avg !== null && avg >= 10 ? 'text-emerald-600 dark:text-emerald-400' : avg !== null ? 'text-rose-600 dark:text-rose-400' : 'text-slate-400'}`}>
+                            {avg !== null ? `${avg}/20` : '—'}
+                          </span>
+                          {result.subjectCalculation && (
+                            <Calculator className="w-3.5 h-3.5 text-emerald-500 opacity-60 group-hover:opacity-100 transition" />
+                          )}
+                        </div>
+                        {result.subjectCalculation?.weightedTotal !== null && typeof result.subjectCalculation?.coefficient === 'number' && result.subjectCalculation.coefficient > 0 && (
+                          <span className="text-[10px] text-slate-400 block text-left font-mono">
+                            المجموع: {result.subjectCalculation.weightedTotal.toFixed(2)}
+                          </span>
                         )}
                       </div>
-                      {result.subjectCalculation?.weightedTotal !== null && (result.subjectCalculation?.coefficient || 1) > 1 && (
-                        <span className="text-[10px] text-slate-400 block text-left">
-                          المجموع: {result.subjectCalculation?.weightedTotal?.toFixed(2)}
-                        </span>
-                      )}
-                    </div>
+                    )}
                   </div>
 
-                  {appraisal && (
+                  {showAppraisalAndRankCol && appraisal && (
                     <div className="mt-2">
                       <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${appraisal.badgeBg} ${appraisal.badgeText} ${appraisal.badgeBorder}`}>
                         {appraisal.label}
@@ -955,45 +1505,94 @@ export const GradesView: React.FC<GradesViewProps> = ({
                     التلميذ(ة)
                   </th>
 
-                  {/* Assessment Columns */}
-                  {filteredAssessments.map((assessment) => {
-                    const typeInfo = ASSESSMENT_TYPE_INFO[assessment.type];
-                    return (
-                      <th
-                        key={assessment.id}
-                        onClick={() => onOpenGradeEntry(assessment)}
-                        className="p-2.5 font-bold min-w-[110px] text-center border-l border-slate-200/80 dark:border-slate-700/80 cursor-pointer hover:bg-emerald-50 dark:hover:bg-emerald-950/40 transition group"
-                        title="انقر لرصد وتعديل نقاط هذا التقييم"
-                      >
-                        <div className="flex flex-col items-center gap-0.5">
-                          <span className={`text-[9px] font-bold px-1.5 py-0.2 rounded-full ${typeInfo.colorBg} ${typeInfo.colorText}`}>
-                            {typeInfo.shortLabel}
-                          </span>
-                          <span className="font-extrabold text-slate-900 dark:text-white truncate max-w-[100px] group-hover:text-emerald-600 transition">
-                            {assessment.title}
-                          </span>
-                          <span className="text-[10px] text-slate-400 font-normal">
-                            م {assessment.coefficient} • /{assessment.maxScore || 20}
-                          </span>
-                        </div>
-                      </th>
-                    );
-                  })}
+                  {/* التقويم: خانة واحدة فقط للنقطة المتحصل عليها */}
+                  {showContinuousCol && (
+                    <th className="p-2.5 font-bold min-w-[130px] text-center border-l border-slate-200/80 dark:border-slate-700/80 bg-amber-50/50 dark:bg-amber-950/20">
+                      <div className="flex flex-col items-center gap-0.5">
+                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-100 dark:bg-amber-900/60 text-amber-800 dark:text-amber-300">
+                          التقويم
+                        </span>
+                        <span className="font-extrabold text-slate-900 dark:text-white text-xs">
+                          التقويم المستمر
+                        </span>
+                        <span className="text-[10px] text-slate-400 font-normal">
+                          النقطة المتحصل عليها (/20)
+                        </span>
+                      </div>
+                    </th>
+                  )}
 
-                  {/* Calculated Average Column */}
-                  <th className="p-3 font-black text-emerald-800 dark:text-emerald-300 min-w-[100px] text-center bg-emerald-50/80 dark:bg-emerald-950/50 border-r border-emerald-200 dark:border-emerald-900">
-                    معدل المادة (/20)
-                  </th>
+                  {/* الفرض الأول: خانة واحدة فقط للنقطة المتحصل عليها */}
+                  {showTest1Col && (
+                    <th className="p-2.5 font-bold min-w-[130px] text-center border-l border-slate-200/80 dark:border-slate-700/80 bg-emerald-50/50 dark:bg-emerald-950/20">
+                      <div className="flex flex-col items-center gap-0.5">
+                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-900/60 text-emerald-800 dark:text-emerald-300">
+                          الفرض 1
+                        </span>
+                        <span className="font-extrabold text-slate-900 dark:text-white text-xs">
+                          الفرض الأول
+                        </span>
+                        <span className="text-[10px] text-slate-400 font-normal">
+                          النقطة المتحصل عليها (/20)
+                        </span>
+                      </div>
+                    </th>
+                  )}
+
+                  {/* الفرض الثاني: خانة واحدة فقط للنقطة المتحصل عليها */}
+                  {showTest2Col && (
+                    <th className="p-2.5 font-bold min-w-[130px] text-center border-l border-slate-200/80 dark:border-slate-700/80 bg-teal-50/50 dark:bg-teal-950/20">
+                      <div className="flex flex-col items-center gap-0.5">
+                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-teal-100 dark:bg-teal-900/60 text-teal-800 dark:text-teal-300">
+                          الفرض 2
+                        </span>
+                        <span className="font-extrabold text-slate-900 dark:text-white text-xs">
+                          الفرض الثاني
+                        </span>
+                        <span className="text-[10px] text-slate-400 font-normal">
+                          النقطة المتحصل عليها (/20)
+                        </span>
+                      </div>
+                    </th>
+                  )}
+
+                  {/* اختبار الفصل: خانة واحدة فقط للنقطة المتحصل عليها */}
+                  {showExamCol && (
+                    <th className="p-2.5 font-bold min-w-[130px] text-center border-l border-slate-200/80 dark:border-slate-700/80 bg-purple-50/50 dark:bg-purple-950/20">
+                      <div className="flex flex-col items-center gap-0.5">
+                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-purple-100 dark:bg-purple-900/60 text-purple-800 dark:text-purple-300">
+                          الاختبار
+                        </span>
+                        <span className="font-extrabold text-slate-900 dark:text-white text-xs">
+                          اختبار الفصل
+                        </span>
+                        <span className="text-[10px] text-slate-400 font-normal">
+                          النقطة المتحصل عليها (/20)
+                        </span>
+                      </div>
+                    </th>
+                  )}
+
+                  {/* Calculated Average Column (يظهر فقط في الاختبار وفي الكل) */}
+                  {showAverageCol && (
+                    <th className="p-3 font-black text-emerald-800 dark:text-emerald-300 min-w-[100px] text-center bg-emerald-50/80 dark:bg-emerald-950/50 border-r border-emerald-200 dark:border-emerald-900">
+                      معدل المادة (/20)
+                    </th>
+                  )}
 
                   {/* Appreciation Column */}
-                  <th className="p-3 font-bold text-slate-700 dark:text-slate-300 min-w-[110px] text-center">
-                    التقدير والملاحظة
-                  </th>
+                  {showAppraisalAndRankCol && (
+                    <th className="p-3 font-bold text-slate-700 dark:text-slate-300 min-w-[110px] text-center">
+                      التقدير والملاحظة
+                    </th>
+                  )}
 
                   {/* Rank Column */}
-                  <th className="p-3 font-bold text-slate-700 dark:text-slate-300 min-w-[70px] text-center">
-                    الرتبة
-                  </th>
+                  {showAppraisalAndRankCol && (
+                    <th className="p-3 font-bold text-slate-700 dark:text-slate-300 min-w-[70px] text-center">
+                      الرتبة
+                    </th>
+                  )}
                 </tr>
               </thead>
 
@@ -1001,7 +1600,7 @@ export const GradesView: React.FC<GradesViewProps> = ({
                 {displayedStudentResults.length === 0 ? (
                   <tr>
                     <td
-                      colSpan={5 + filteredAssessments.length}
+                      colSpan={2 + totalAssessmentCols}
                       className="py-12 text-center text-slate-400"
                     >
                       لا توجد بيانات مطابقة لخيارات البحث أو التصفية
@@ -1036,99 +1635,147 @@ export const GradesView: React.FC<GradesViewProps> = ({
                           </div>
                         </td>
 
-                        {/* Assessment Scores */}
-                        {filteredAssessments.map((a) => {
-                          const scoreObj = row.scoresByAssessmentId[a.id];
+                        {/* التقويم: خانة واحدة فقط لإدخال النقطة */}
+                        {showContinuousCol && (
+                          <td className="p-2 text-center border-l border-slate-100 dark:border-slate-800 bg-amber-50/10 dark:bg-amber-950/10">
+                            <div className="flex items-center justify-center">
+                              <input
+                                type="number"
+                                min="0"
+                                max="20"
+                                step="0.25"
+                                placeholder="—"
+                                value={getStudentScoreValue(row.student.id, 'continuous')}
+                                onChange={(e) => handleDirectScoreInput(row.student.id, 'continuous', e.target.value)}
+                                className="w-20 h-8 px-2 text-center font-bold text-xs rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-hidden focus:ring-2 focus:ring-amber-500 font-mono shadow-2xs transition"
+                                title="التقويم: النقطة المتحصل عليها (من 20)"
+                              />
+                            </div>
+                          </td>
+                        )}
 
-                          return (
-                            <td
-                              key={a.id}
-                              onClick={() => onOpenGradeEntry(a)}
-                              className="p-2.5 text-center border-l border-slate-100 dark:border-slate-800 cursor-pointer hover:bg-emerald-50/50 dark:hover:bg-emerald-950/20 transition font-mono"
-                              title="انقر لتعديل نقطة التلميذ"
-                            >
-                              {scoreObj?.isAbsent ? (
-                                <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-amber-100 dark:bg-amber-950 text-amber-800 dark:text-amber-300">
-                                  غائب
-                                </span>
-                              ) : scoreObj && scoreObj.rawScore !== null ? (
+                        {/* الفرض الأول: خانة واحدة فقط لإدخال النقطة */}
+                        {showTest1Col && (
+                          <td className="p-2 text-center border-l border-slate-100 dark:border-slate-800 bg-emerald-50/10 dark:bg-emerald-950/10">
+                            <div className="flex items-center justify-center">
+                              <input
+                                type="number"
+                                min="0"
+                                max="20"
+                                step="0.25"
+                                placeholder="—"
+                                value={getStudentScoreValue(row.student.id, 'test1')}
+                                onChange={(e) => handleDirectScoreInput(row.student.id, 'test1', e.target.value)}
+                                className="w-20 h-8 px-2 text-center font-bold text-xs rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-hidden focus:ring-2 focus:ring-emerald-500 font-mono shadow-2xs transition"
+                                title="الفرض الأول: النقطة المتحصل عليها (من 20)"
+                              />
+                            </div>
+                          </td>
+                        )}
+
+                        {/* الفرض الثاني: خانة واحدة فقط لإدخال النقطة */}
+                        {showTest2Col && (
+                          <td className="p-2 text-center border-l border-slate-100 dark:border-slate-800 bg-teal-50/10 dark:bg-teal-950/10">
+                            <div className="flex items-center justify-center">
+                              <input
+                                type="number"
+                                min="0"
+                                max="20"
+                                step="0.25"
+                                placeholder="—"
+                                value={getStudentScoreValue(row.student.id, 'test2')}
+                                onChange={(e) => handleDirectScoreInput(row.student.id, 'test2', e.target.value)}
+                                className="w-20 h-8 px-2 text-center font-bold text-xs rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-hidden focus:ring-2 focus:ring-teal-500 font-mono shadow-2xs transition"
+                                title="الفرض الثاني: النقطة المتحصل عليها (من 20)"
+                              />
+                            </div>
+                          </td>
+                        )}
+
+                        {/* اختبار الفصل: خانة واحدة فقط لإدخال النقطة */}
+                        {showExamCol && (
+                          <td className="p-2 text-center border-l border-slate-100 dark:border-slate-800 bg-purple-50/10 dark:bg-purple-950/10">
+                            <div className="flex items-center justify-center">
+                              <input
+                                type="number"
+                                min="0"
+                                max="20"
+                                step="0.25"
+                                placeholder="—"
+                                value={getStudentScoreValue(row.student.id, 'exam')}
+                                onChange={(e) => handleDirectScoreInput(row.student.id, 'exam', e.target.value)}
+                                className="w-20 h-8 px-2 text-center font-bold text-xs rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-hidden focus:ring-2 focus:ring-purple-500 font-mono shadow-2xs transition"
+                                title="اختبار الفصل: النقطة المتحصل عليها (من 20)"
+                              />
+                            </div>
+                          </td>
+                        )}
+
+                        {/* Calculated Average */}
+                        {showAverageCol && (
+                          <td 
+                            className="p-3 text-center bg-emerald-50/40 dark:bg-emerald-950/20 border-r border-emerald-100 dark:border-emerald-900/60 font-mono cursor-pointer hover:bg-emerald-100/70 dark:hover:bg-emerald-900/40 transition group"
+                            onClick={() => {
+                              if (row.subjectCalculation) {
+                                setBreakdownModalData({
+                                  student: row.student,
+                                  calculationResult: row.subjectCalculation,
+                                });
+                              }
+                            }}
+                            title="انقر لعرض تفاصيل وخطوات كيفية الحساب"
+                          >
+                            {avg !== null ? (
+                              <div className="flex flex-col items-center justify-center">
                                 <span
-                                  className={`font-bold ${
-                                    (scoreObj.scoreOutOf20 || 0) >= 10
-                                      ? 'text-slate-900 dark:text-white'
+                                  className={`text-sm font-black flex items-center gap-1 ${
+                                    avg >= 10
+                                      ? 'text-emerald-700 dark:text-emerald-400'
                                       : 'text-rose-600 dark:text-rose-400'
                                   }`}
                                 >
-                                  {scoreObj.rawScore}
+                                  {avg.toFixed(2)}
+                                  <Calculator className="w-3 h-3 text-emerald-500 opacity-60 group-hover:opacity-100 group-hover:scale-110 transition" />
                                 </span>
-                              ) : (
-                                <span className="text-slate-300 dark:text-slate-700 font-normal">
-                                  —
-                                </span>
-                              )}
-                            </td>
-                          );
-                        })}
-
-                        {/* Calculated Average */}
-                        <td 
-                          className="p-3 text-center bg-emerald-50/40 dark:bg-emerald-950/20 border-r border-emerald-100 dark:border-emerald-900/60 font-mono cursor-pointer hover:bg-emerald-100/70 dark:hover:bg-emerald-900/40 transition group"
-                          onClick={() => {
-                            if (row.subjectCalculation) {
-                              setBreakdownModalData({
-                                student: row.student,
-                                calculationResult: row.subjectCalculation,
-                              });
-                            }
-                          }}
-                          title="انقر لعرض تفاصيل وخطوات كيفية الحساب"
-                        >
-                          {avg !== null ? (
-                            <div className="flex flex-col items-center justify-center">
-                              <span
-                                className={`text-sm font-black flex items-center gap-1 ${
-                                  avg >= 10
-                                    ? 'text-emerald-700 dark:text-emerald-400'
-                                    : 'text-rose-600 dark:text-rose-400'
-                                }`}
-                              >
-                                {avg.toFixed(2)}
-                                <Calculator className="w-3 h-3 text-emerald-500 opacity-60 group-hover:opacity-100 group-hover:scale-110 transition" />
-                              </span>
-                              {row.subjectCalculation?.weightedTotal !== null && (row.subjectCalculation?.coefficient || 1) > 1 && (
-                                <span className="text-[10px] text-slate-500 dark:text-slate-400 font-normal">
-                                  المجموع: {row.subjectCalculation?.weightedTotal?.toFixed(2)}
-                                </span>
-                              )}
-                            </div>
-                          ) : (
-                            <span className="text-slate-400">—</span>
-                          )}
-                        </td>
+                                {row.subjectCalculation?.weightedTotal !== null && typeof row.subjectCalculation?.coefficient === 'number' && row.subjectCalculation.coefficient > 0 && (
+                                  <span className="text-[10px] text-slate-500 dark:text-slate-400 font-normal font-mono">
+                                    المجموع: {row.subjectCalculation.weightedTotal.toFixed(2)}
+                                  </span>
+                                )}
+                              </div>
+                            ) : (
+                              <span className="text-slate-400">—</span>
+                            )}
+                          </td>
+                        )}
 
                         {/* Appraisal */}
-                        <td className="p-3 text-center">
-                          {appraisal ? (
-                            <span
-                              className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${appraisal.badgeBg} ${appraisal.badgeText} ${appraisal.badgeBorder}`}
-                            >
-                              {appraisal.label}
-                            </span>
-                          ) : (
-                            <span className="text-slate-300 text-[11px]">—</span>
-                          )}
-                        </td>
+                        {showAppraisalAndRankCol && (
+                          <td className="p-3 text-center">
+                            {appraisal ? (
+                              <span
+                                className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${appraisal.badgeBg} ${appraisal.badgeText} ${appraisal.badgeBorder}`}
+                              >
+                                {appraisal.label}
+                              </span>
+                            ) : (
+                              <span className="text-slate-300 text-[11px]">—</span>
+                            )}
+                          </td>
+                        )}
 
                         {/* Rank */}
-                        <td className="p-3 text-center font-bold text-slate-700 dark:text-slate-300 font-mono">
-                          {row.rank !== null ? (
-                            <span className={`px-2 py-0.5 rounded-md text-xs ${row.rank === 1 ? 'bg-amber-100 text-amber-800 font-black' : ''}`}>
-                              {row.rank}
-                            </span>
-                          ) : (
-                            '—'
-                          )}
-                        </td>
+                        {showAppraisalAndRankCol && (
+                          <td className="p-3 text-center font-bold text-slate-700 dark:text-slate-300 font-mono">
+                            {row.rank !== null ? (
+                              <span className={`px-2 py-0.5 rounded-md text-xs ${row.rank === 1 ? 'bg-amber-100 text-amber-800 font-black' : ''}`}>
+                                {row.rank}
+                              </span>
+                            ) : (
+                              '—'
+                            )}
+                          </td>
+                        )}
                       </tr>
                     );
                   })
@@ -1136,26 +1783,42 @@ export const GradesView: React.FC<GradesViewProps> = ({
               </tbody>
 
               {/* Table Footer Summary Row */}
-              {displayedStudentResults.length > 0 && filteredAssessments.length > 0 && (
+              {displayedStudentResults.length > 0 && (
                 <tfoot>
                   <tr className="bg-slate-100/90 dark:bg-slate-800 font-bold border-t-2 border-slate-300 dark:border-slate-700 text-xs">
                     <td colSpan={2} className="p-3 text-slate-900 dark:text-white sticky right-0 z-10 bg-slate-100 dark:bg-slate-800">
                       معدل التقييمات في القسم:
                     </td>
-                    {filteredAssessments.map((a) => {
-                      const stats = computeAssessmentStats(a, students);
-                      return (
-                        <td key={a.id} className="p-2.5 text-center font-mono text-emerald-700 dark:text-emerald-400 border-l border-slate-200 dark:border-slate-700">
-                          {stats.average !== null ? `${stats.average}` : '—'}
-                        </td>
-                      );
-                    })}
-                    <td className="p-3 text-center font-black text-emerald-700 dark:text-emerald-400 bg-emerald-100/60 dark:bg-emerald-950 font-mono text-sm">
-                      {gradesReport.classAverage !== null ? gradesReport.classAverage.toFixed(2) : '—'}
-                    </td>
-                    <td colSpan={2} className="p-3 text-center text-slate-500 font-normal">
-                      نسبة النجاح: {gradesReport.passRate}%
-                    </td>
+                    {showContinuousCol && (
+                      <td className="p-2.5 text-center font-mono text-amber-700 dark:text-amber-400 border-l border-slate-200 dark:border-slate-700">
+                        {continuousAvg !== null ? `${continuousAvg}` : '—'}
+                      </td>
+                    )}
+                    {showTest1Col && (
+                      <td className="p-2.5 text-center font-mono text-emerald-700 dark:text-emerald-400 border-l border-slate-200 dark:border-slate-700">
+                        {test1Avg !== null ? `${test1Avg}` : '—'}
+                      </td>
+                    )}
+                    {showTest2Col && (
+                      <td className="p-2.5 text-center font-mono text-teal-700 dark:text-teal-400 border-l border-slate-200 dark:border-slate-700">
+                        {test2Avg !== null ? `${test2Avg}` : '—'}
+                      </td>
+                    )}
+                    {showExamCol && (
+                      <td className="p-2.5 text-center font-mono text-purple-700 dark:text-purple-400 border-l border-slate-200 dark:border-slate-700">
+                        {examAvg !== null ? `${examAvg}` : '—'}
+                      </td>
+                    )}
+                    {showAverageCol && (
+                      <td className="p-3 text-center font-black text-emerald-700 dark:text-emerald-400 bg-emerald-100/60 dark:bg-emerald-950 font-mono text-sm">
+                        {gradesReport.classAverage !== null ? gradesReport.classAverage.toFixed(2) : '—'}
+                      </td>
+                    )}
+                    {showAppraisalAndRankCol && (
+                      <td colSpan={2} className="p-3 text-center text-slate-500 font-normal">
+                        نسبة النجاح: {gradesReport.passRate}%
+                      </td>
+                    )}
                   </tr>
                 </tfoot>
               )}
@@ -1308,6 +1971,13 @@ export const GradesView: React.FC<GradesViewProps> = ({
               </div>
             )}
 
+            {exportErrorMessage && (
+              <div className="mb-4 p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 text-xs font-bold flex items-center gap-2 print:hidden animate-in fade-in">
+                <span className="w-4 h-4 text-rose-600 shrink-0 font-bold">⚠️</span>
+                <span>{exportErrorMessage}</span>
+              </div>
+            )}
+
             {/* Official Algerian School Header */}
             <div className="text-center space-y-1 mb-6 border-b-2 border-slate-900 pb-4">
               <h3 className="font-bold text-sm sm:text-base">الجمهورية الجزائرية الديمقراطية الشعبية</h3>
@@ -1333,14 +2003,30 @@ export const GradesView: React.FC<GradesViewProps> = ({
                 <tr className="bg-slate-100 border-b border-slate-400 text-center font-bold">
                   <th className="border border-slate-400 p-2 w-8">#</th>
                   <th className="border border-slate-400 p-2 text-right">اللقب والاسم</th>
-                  {filteredAssessments.map((a) => (
-                    <th key={a.id} className="border border-slate-400 p-2">
-                      <div>{a.title}</div>
-                      <div className="text-[10px] font-normal text-slate-600">
-                        م {a.coefficient} (/{a.maxScore || 20})
-                      </div>
+                  {showContinuousCol && (
+                    <th className="border border-slate-400 p-2">
+                      <div>التقويم المستمر</div>
+                      <div className="text-[10px] font-normal text-slate-600">(/20)</div>
                     </th>
-                  ))}
+                  )}
+                  {showTest1Col && (
+                    <th className="border border-slate-400 p-2">
+                      <div>الفرض الأول</div>
+                      <div className="text-[10px] font-normal text-slate-600">(/20)</div>
+                    </th>
+                  )}
+                  {showTest2Col && (
+                    <th className="border border-slate-400 p-2">
+                      <div>الفرض الثاني</div>
+                      <div className="text-[10px] font-normal text-slate-600">(/20)</div>
+                    </th>
+                  )}
+                  {showExamCol && (
+                    <th className="border border-slate-400 p-2">
+                      <div>اختبار الفصل</div>
+                      <div className="text-[10px] font-normal text-slate-600">(/20)</div>
+                    </th>
+                  )}
                   <th className="border border-slate-400 p-2 bg-slate-200">المعدل / 20</th>
                   <th className="border border-slate-400 p-2">التقدير</th>
                   <th className="border border-slate-400 p-2 w-12">الرتبة</th>
@@ -1353,14 +2039,26 @@ export const GradesView: React.FC<GradesViewProps> = ({
                     <td className="border border-slate-300 p-1.5 font-bold">
                       {r.student.lastName} {r.student.firstName}
                     </td>
-                    {filteredAssessments.map((a) => {
-                      const sc = r.scoresByAssessmentId[a.id];
-                      return (
-                        <td key={a.id} className="border border-slate-300 p-1.5 text-center font-mono">
-                          {sc?.isAbsent ? 'غائب' : sc?.rawScore !== null && sc?.rawScore !== undefined ? sc.rawScore : '—'}
-                        </td>
-                      );
-                    })}
+                    {showContinuousCol && (
+                      <td className="border border-slate-300 p-1.5 text-center font-mono">
+                        {getStudentScoreValue(r.studentId, 'continuous') !== '' ? getStudentScoreValue(r.studentId, 'continuous') : '—'}
+                      </td>
+                    )}
+                    {showTest1Col && (
+                      <td className="border border-slate-300 p-1.5 text-center font-mono">
+                        {getStudentScoreValue(r.studentId, 'test1') !== '' ? getStudentScoreValue(r.studentId, 'test1') : '—'}
+                      </td>
+                    )}
+                    {showTest2Col && (
+                      <td className="border border-slate-300 p-1.5 text-center font-mono">
+                        {getStudentScoreValue(r.studentId, 'test2') !== '' ? getStudentScoreValue(r.studentId, 'test2') : '—'}
+                      </td>
+                    )}
+                    {showExamCol && (
+                      <td className="border border-slate-300 p-1.5 text-center font-mono">
+                        {getStudentScoreValue(r.studentId, 'exam') !== '' ? getStudentScoreValue(r.studentId, 'exam') : '—'}
+                      </td>
+                    )}
                     <td className="border border-slate-300 p-1.5 text-center font-black font-mono bg-slate-50">
                       {r.average !== null ? r.average.toFixed(2) : '—'}
                     </td>

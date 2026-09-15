@@ -92,7 +92,7 @@ export function getAlgerianAppraisal(scoreOutOf20: number): AlgerianAppraisal {
   };
 }
 
-export const PRIMARY_ASSESSMENT_TYPES: AssessmentType[] = ['test1', 'test2', 'exam'];
+export const PRIMARY_ASSESSMENT_TYPES: AssessmentType[] = ['continuous', 'test1', 'test2', 'exam'];
 
 export const ASSESSMENT_TYPE_INFO: Record<
   AssessmentType,
@@ -105,6 +105,14 @@ export const ASSESSMENT_TYPE_INFO: Record<
     defaultCoeff: number;
   }
 > = {
+  continuous: {
+    label: 'التقويم (المستمر)',
+    shortLabel: 'التقويم',
+    colorBg: 'bg-amber-100 dark:bg-amber-950/80',
+    colorText: 'text-amber-800 dark:text-amber-300',
+    colorBorder: 'border-amber-300 dark:border-amber-800',
+    defaultCoeff: 1,
+  },
   test1: {
     label: 'فرض 1 (الفرض الأول)',
     shortLabel: 'فرض 1',
@@ -137,14 +145,6 @@ export const ASSESSMENT_TYPE_INFO: Record<
     colorBorder: 'border-emerald-300 dark:border-emerald-800',
     defaultCoeff: 1,
   },
-  continuous: {
-    label: 'تقويم مستمر',
-    shortLabel: 'تقويم',
-    colorBg: 'bg-amber-100 dark:bg-amber-950/80',
-    colorText: 'text-amber-800 dark:text-amber-300',
-    colorBorder: 'border-amber-300 dark:border-amber-800',
-    defaultCoeff: 1,
-  },
   activity: {
     label: 'نشاط / أعمال تطبيقية',
     shortLabel: 'نشاط/أ.ت',
@@ -172,7 +172,7 @@ export interface AssessmentGradeDetail {
 
 export interface SubjectCalculationDetailResult {
   averageOutOf20: number | null; // معدل المادة (من 20)
-  coefficient: number; // معامل المادة (المعامل الوحيد للمادة)
+  coefficient: number | null; // معامل المادة (المعامل الوحيد للمادة)
   weightedTotal: number | null; // معدل المادة × معامل المادة
   appraisal: AlgerianAppraisal | null;
   methodName: string;
@@ -200,7 +200,8 @@ export function calculateSubjectGrade(
   exam: { rawScore?: number | null; maxScore?: number; isAbsent?: boolean; note?: string; title?: string },
   subjectSetting?: SubjectSetting | null
 ): SubjectCalculationDetailResult {
-  const coeff = subjectSetting?.coefficient && subjectSetting.coefficient > 0 ? subjectSetting.coefficient : 1;
+  const hasValidCoeff = typeof subjectSetting?.coefficient === 'number' && !isNaN(subjectSetting.coefficient) && subjectSetting.coefficient > 0;
+  const coeff: number | null = hasValidCoeff ? (subjectSetting!.coefficient as number) : null;
   const config = subjectSetting?.calculationMethod || {
     method: 'tests_avg_plus_exam_x2_div_3',
     customTest1Weight: 1,
@@ -436,12 +437,16 @@ export function calculateSubjectGrade(
   }
 
   const finalAvg = calculatedAvg !== null ? Math.round(calculatedAvg * 100) / 100 : null;
-  const weightedTotal = finalAvg !== null ? Math.round(finalAvg * coeff * 100) / 100 : null;
+  const weightedTotal = finalAvg !== null && coeff !== null ? Math.round(finalAvg * coeff * 100) / 100 : null;
   const appraisal = finalAvg !== null ? getAlgerianAppraisal(finalAvg) : null;
 
   if (finalAvg !== null) {
     steps.push(`الناتج النهائي لمعدل المادة: ${finalAvg.toFixed(2)} / 20 (${appraisal?.label || ''})`);
-    steps.push(`المجموع الموزون بمعامل المادة (${coeff}): ${finalAvg.toFixed(2)} × ${coeff} = ${weightedTotal?.toFixed(2)} نقطة`);
+    if (coeff !== null) {
+      steps.push(`المجموع الموزون بمعامل المادة (${coeff}): ${finalAvg.toFixed(2)} × ${coeff} = ${weightedTotal?.toFixed(2)} نقطة`);
+    } else {
+      steps.push('معامل المادة غير محدد (لم يتم حساب المجموع الموزون).');
+    }
   }
 
   return {
@@ -628,7 +633,7 @@ export function calculateStudentAverage(
           testScores.push(scoreObj.scoreOutOf20);
         } else if (a.type === 'exam') {
           examScore = scoreObj.scoreOutOf20;
-          examCoeff = a.coefficient || 2;
+          examCoeff = (typeof a.coefficient === 'number' && a.coefficient > 0) ? a.coefficient : 2;
         }
       }
     });

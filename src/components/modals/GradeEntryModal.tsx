@@ -60,10 +60,12 @@ export const GradeEntryModal: React.FC<GradeEntryModalProps> = ({
 
   if (!isOpen || !assessment) return null;
 
-  const maxScore = assessment.maxScore || 20;
+  const maxScore = (assessment.maxScore !== undefined && assessment.maxScore !== null && assessment.maxScore > 0)
+    ? assessment.maxScore
+    : 20;
 
   const handleScoreChange = (studentId: string, valStr: string) => {
-    if (valStr === '') {
+    if (valStr.trim() === '') {
       setGradesMap((prev) => ({
         ...prev,
         [studentId]: {
@@ -155,7 +157,18 @@ export const GradeEntryModal: React.FC<GradeEntryModalProps> = ({
   const handleSave = async () => {
     setIsSaving(true);
     try {
-      await onSaveGrades(assessment.id, gradesMap);
+      const cleanedGrades: Record<string, StudentScoreRecord> = {};
+      Object.entries(gradesMap).forEach(([sId, rec]) => {
+        const record = rec as StudentScoreRecord;
+        if (record && (record.isAbsent || (typeof record.score === 'number' && !isNaN(record.score)) || (record.note && record.note.trim() !== ''))) {
+          cleanedGrades[sId] = {
+            score: typeof record.score === 'number' && !isNaN(record.score) ? record.score : null,
+            isAbsent: !!record.isAbsent,
+            note: record.note?.trim() || undefined,
+          };
+        }
+      });
+      await onSaveGrades(assessment.id, cleanedGrades);
       onClose();
     } catch (err) {
       console.error(err);
@@ -192,7 +205,7 @@ export const GradeEntryModal: React.FC<GradeEntryModalProps> = ({
                 </span>
               </div>
               <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                {assessment.className} • المادة: {assessment.subject} • المعامل: {assessment.coefficient} • العلامة القصوى: /{maxScore}
+                {assessment.className} • المادة: {assessment.subject} {assessment.type !== 'test' && assessment.type !== 'test1' && assessment.type !== 'test2' ? `• المعامل: ${assessment.coefficient}` : ''} • العلامة القصوى: /{maxScore}
               </p>
             </div>
           </div>

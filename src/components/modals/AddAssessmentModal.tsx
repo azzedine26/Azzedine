@@ -32,8 +32,8 @@ export const AddAssessmentModal: React.FC<AddAssessmentModalProps> = ({
   const [title, setTitle] = useState<string>('');
   const [subject, setSubject] = useState<string>(defaultSubject || 'الرياضيات');
   const [date, setDate] = useState<string>(new Date().toISOString().slice(0, 10));
-  const [coefficient, setCoefficient] = useState<number>(1);
-  const [maxScore, setMaxScore] = useState<number>(20);
+  const [coefficient, setCoefficient] = useState<number | string>(1);
+  const [maxScore, setMaxScore] = useState<number | string>(20);
   const [notes, setNotes] = useState<string>('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -51,8 +51,16 @@ export const AddAssessmentModal: React.FC<AddAssessmentModalProps> = ({
       setTitle(editingAssessment.title);
       setSubject(editingAssessment.subject || defaultSubject || 'الرياضيات');
       setDate(editingAssessment.date);
-      setCoefficient(editingAssessment.coefficient || 1);
-      setMaxScore(editingAssessment.maxScore || 20);
+      setCoefficient(
+        editingAssessment.coefficient !== undefined && editingAssessment.coefficient !== null
+          ? editingAssessment.coefficient
+          : 1
+      );
+      setMaxScore(
+        editingAssessment.maxScore !== undefined && editingAssessment.maxScore !== null
+          ? editingAssessment.maxScore
+          : 20
+      );
       setNotes(editingAssessment.notes || '');
     } else {
       const foundClass = classes.find((c) => c.id === defaultClassId) || classes[0];
@@ -129,10 +137,20 @@ export const AddAssessmentModal: React.FC<AddAssessmentModalProps> = ({
       alert('يرجى تحديد المادة التعليمية');
       return;
     }
-    if (coefficient <= 0) {
+    const parsedCoeff = typeof coefficient === 'number'
+      ? coefficient
+      : parseInt(String(coefficient).trim());
+
+    if (isNaN(parsedCoeff) || parsedCoeff <= 0) {
       alert('المعامل يجب أن يكون أكبر من 0');
       return;
     }
+
+    const parsedMax = typeof maxScore === 'number'
+      ? maxScore
+      : parseInt(String(maxScore).trim());
+
+    const finalMaxScore = (!isNaN(parsedMax) && parsedMax > 0) ? parsedMax : 20;
 
     const selectedClassObj = classes.find((c) => c.id === classId);
 
@@ -145,8 +163,8 @@ export const AddAssessmentModal: React.FC<AddAssessmentModalProps> = ({
       subject: (editingAssessment ? (subject || defaultSubject || 'الرياضيات') : (defaultSubject || subject || 'الرياضيات')).trim(),
       trimester,
       date,
-      coefficient: Number(coefficient) || 1,
-      maxScore: Number(maxScore) || 20,
+      coefficient: Math.max(1, parsedCoeff),
+      maxScore: finalMaxScore,
       notes: notes.trim(),
       grades: editingAssessment ? editingAssessment.grades : {},
       createdAt: editingAssessment ? editingAssessment.createdAt : Date.now(),
@@ -349,7 +367,15 @@ export const AddAssessmentModal: React.FC<AddAssessmentModalProps> = ({
                   step="1"
                   max="100"
                   value={maxScore}
-                  onChange={(e) => setMaxScore(parseInt(e.target.value) || 20)}
+                  onChange={(e) => setMaxScore(e.target.value)}
+                  onBlur={() => {
+                    const p = parseInt(String(maxScore).trim());
+                    if (isNaN(p) || p < 1) {
+                      setMaxScore(20);
+                    } else {
+                      setMaxScore(Math.min(100, Math.max(1, p)));
+                    }
+                  }}
                   className="w-24 h-10 px-2 text-center rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-sm font-black focus:ring-2 focus:ring-emerald-500 focus:outline-hidden"
                 />
                 <div className="flex items-center gap-1">
@@ -359,7 +385,7 @@ export const AddAssessmentModal: React.FC<AddAssessmentModalProps> = ({
                       type="button"
                       onClick={() => setMaxScore(num)}
                       className={`px-2.5 py-1.5 rounded-lg border text-xs font-bold transition ${
-                        maxScore === num
+                        Number(maxScore) === num
                           ? 'border-emerald-600 bg-emerald-50 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300'
                           : 'border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-400'
                       }`}

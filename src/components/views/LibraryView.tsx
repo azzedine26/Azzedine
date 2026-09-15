@@ -30,7 +30,10 @@ import { ClassItem, LibraryItem, LibraryItemType, TeacherProfile } from '../../t
 import { AddLibraryItemModal } from '../modals/AddLibraryItemModal';
 import { FilePreviewModal } from '../modals/FilePreviewModal';
 import { RenameLibraryItemModal } from '../modals/RenameLibraryItemModal';
+import { LibraryItemCard } from '../library/LibraryItemCard';
 import { getSubjectsForGradeAndStage } from '../../data/algerianData';
+import { downloadBlobFile } from '../../utils/fileHelpers';
+import { databaseService } from '../../db/databaseService';
 
 interface LibraryViewProps {
   items: LibraryItem[];
@@ -267,17 +270,14 @@ export const LibraryView: React.FC<LibraryViewProps> = ({
             <div className="flex items-center gap-2 mb-1.5">
               <span className="px-2.5 py-0.5 rounded-full bg-emerald-600/60 border border-emerald-400/30 text-[11px] font-black text-emerald-200 flex items-center gap-1">
                 <Folder className="w-3 h-3" />
-                مكتبة الأستاذ المحلية
-              </span>
-              <span className="px-2.5 py-0.5 rounded-full bg-emerald-700/60 border border-emerald-400/20 text-[11px] font-bold text-white/90">
-                IndexedDB (بدون إنترنت)
+                مكتبة الأستاذ التربوية
               </span>
             </div>
             <h1 className="text-xl sm:text-2xl font-black tracking-tight text-white flex items-center gap-2.5">
               <span>مكتبة الدروس والملفات</span>
             </h1>
             <p className="text-xs sm:text-sm text-emerald-100/90 mt-1 max-w-2xl leading-relaxed">
-              تخزين محلي آمن للدروس، الفروض، المذكرات، وسلاسل التمارين بصيغ (PDF، Word، صور وملاحظات) مع إمكانية الفتح والتنظيم حسب الأقسام والمواد.
+              تنظيم وإدارة الدروس، الفروض، المذكرات، وسلاسل التمارين بصيغ (PDF، Word، صور وملاحظات) مصنفة حسب الأقسام والمواد.
             </p>
           </div>
 
@@ -330,7 +330,7 @@ export const LibraryView: React.FC<LibraryViewProps> = ({
             </div>
             <div>
               <div className="text-base sm:text-lg font-black">{formatFileSize(stats.totalSize)}</div>
-              <div className="text-[11px] text-emerald-200/80">حجم التخزين المحلي</div>
+              <div className="text-[11px] text-emerald-200/80">إجمالي حجم الملفات</div>
             </div>
           </div>
         </div>
@@ -526,7 +526,7 @@ export const LibraryView: React.FC<LibraryViewProps> = ({
           <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 max-w-md mb-5">
             {searchQuery || selectedFolder !== 'ALL' || selectedTypeFilter !== 'ALL'
               ? 'جرّب تعديل كلمات البحث أو إلغاء التصفية لإظهار كافة عناصر المكتبة.'
-              : 'ابدأ بإضافة أول ملف أو درس إلى مكتبتك المحلية لتتمكن من الوصول إليه في أي وقت.'}
+              : 'ابدأ بإضافة أول ملف أو درس إلى مكتبتك لتتمكن من الوصول إليه في أي وقت.'}
           </p>
           <button
             onClick={() => setIsAddModalOpen(true)}
@@ -537,104 +537,21 @@ export const LibraryView: React.FC<LibraryViewProps> = ({
           </button>
         </div>
       ) : viewMode === 'grid' ? (
-        /* GRID VIEW */
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3.5 sm:gap-4">
-          {filteredItems.map((item) => {
-            const details = getItemTypeDetails(item);
-            const TypeIcon = details.icon;
-
-            return (
-              <div
-                key={item.id}
-                onClick={() => setPreviewItem(item)}
-                className="bg-white dark:bg-slate-900 rounded-2xl p-4 border border-slate-200/80 dark:border-slate-800 hover:border-emerald-500/60 dark:hover:border-emerald-600/60 shadow-sm hover:shadow-md transition-all group flex flex-col justify-between cursor-pointer"
-              >
-                <div>
-                  {/* Card Top: Type badge & folder */}
-                  <div className="flex items-center justify-between gap-2 mb-3">
-                    <span className={`px-2.5 py-1 rounded-lg text-[11px] font-black border flex items-center gap-1.5 ${details.badge}`}>
-                      <TypeIcon className="w-3.5 h-3.5" />
-                      <span>{details.label}</span>
-                    </span>
-
-                    <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400 flex items-center gap-1 bg-slate-100 dark:bg-slate-800/80 px-2 py-0.5 rounded-md">
-                      <Folder className="w-3 h-3 text-emerald-600 dark:text-emerald-400" />
-                      {item.folderName}
-                    </span>
-                  </div>
-
-                  {/* Title */}
-                  <h3 className="text-sm sm:text-base font-black text-slate-900 dark:text-white line-clamp-2 mb-1.5 group-hover:text-emerald-700 dark:group-hover:text-emerald-400 transition-colors">
-                    {item.title}
-                  </h3>
-
-                  {/* File name or note preview */}
-                  {item.itemType === 'file' && item.fileName ? (
-                    <div className="text-xs font-mono text-slate-500 dark:text-slate-400 truncate mb-2">
-                      {item.fileName}
-                    </div>
-                  ) : item.description ? (
-                    <p className="text-xs text-slate-600 dark:text-slate-400 line-clamp-2 mb-2">
-                      {item.description}
-                    </p>
-                  ) : null}
-
-                  {/* Subject and Class chips */}
-                  <div className="flex items-center gap-1.5 flex-wrap text-[11px] text-slate-600 dark:text-slate-300 mb-3">
-                    <span className="bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded font-bold">
-                      {item.subject}
-                    </span>
-                    {item.className && (
-                      <span className="bg-emerald-50 dark:bg-emerald-950/50 text-emerald-800 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800/60 px-2 py-0.5 rounded font-bold truncate max-w-[140px]">
-                        {item.className}
-                      </span>
-                    )}
-                  </div>
-                </div>
-
-                {/* Card Bottom: Metadata and Actions */}
-                <div className="pt-3 border-t border-slate-100 dark:border-slate-800/80 flex items-center justify-between text-xs text-slate-500 dark:text-slate-400">
-                  <div className="flex items-center gap-2">
-                    {item.fileSize ? (
-                      <span className="font-bold text-slate-700 dark:text-slate-300">
-                        {formatFileSize(item.fileSize)}
-                      </span>
-                    ) : (
-                      <span className="font-bold text-amber-600 dark:text-amber-400">
-                        نص / مذكرة
-                      </span>
-                    )}
-                    <span>•</span>
-                    <span>{new Date(item.createdAt).toLocaleDateString('ar-DZ')}</span>
-                  </div>
-
-                  <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
-                    <button
-                      onClick={() => setPreviewItem(item)}
-                      className="p-1.5 rounded-lg text-slate-600 hover:text-emerald-700 hover:bg-emerald-50 dark:text-slate-300 dark:hover:bg-slate-800 transition"
-                      title="فتح ومعاينة"
-                    >
-                      <Eye className="w-4 h-4" />
-                    </button>
-                    <button
-                      onClick={() => setEditingItem(item)}
-                      className="p-1.5 rounded-lg text-slate-600 hover:text-amber-700 hover:bg-amber-50 dark:text-slate-300 dark:hover:bg-slate-800 transition"
-                      title="إعادة تسمية / تعديل"
-                    >
-                      <Edit3 className="w-4 h-4" />
-                    </button>
-                    <button
-                      onClick={() => setDeletingItemId(item.id)}
-                      className="p-1.5 rounded-lg text-slate-600 hover:text-rose-700 hover:bg-rose-50 dark:text-slate-300 dark:hover:bg-slate-800 transition"
-                      title="حذف من المكتبة"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
-                  </div>
-                </div>
-              </div>
-            );
-          })}
+        /* GRID VIEW WITH VISUAL PREVIEW CARDS */
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          {filteredItems.map((item) => (
+            <LibraryItemCard
+              key={item.id}
+              item={item}
+              onOpen={(selected) => setPreviewItem(selected)}
+              onEdit={(selected) => setEditingItem(selected)}
+              onDelete={(id) => setDeletingItemId(id)}
+              onThumbnailGenerated={(id, thumb) => {
+                // Update in-memory item state if needed
+                item.thumbnailUrl = thumb;
+              }}
+            />
+          ))}
         </div>
       ) : (
         /* LIST VIEW */
@@ -643,6 +560,20 @@ export const LibraryView: React.FC<LibraryViewProps> = ({
             const details = getItemTypeDetails(item);
             const TypeIcon = details.icon;
 
+            const handleListDownload = async (e: React.MouseEvent) => {
+              e.stopPropagation();
+              if (item.itemType === 'note') {
+                const noteText = `${item.title}\n\nالمادة: ${item.subject}\n\n---\n\n${item.content || ''}`;
+                const blob = new Blob([noteText], { type: 'text/markdown;charset=utf-8' });
+                downloadBlobFile(blob, `${item.title.replace(/\s+/g, '_')}.md`);
+              } else if (item.fileId) {
+                const fileRecord = await databaseService.getLibraryFile(item.fileId);
+                if (fileRecord && fileRecord.blob) {
+                  downloadBlobFile(fileRecord.blob, item.fileName || `${item.title}.${item.fileExtension || 'bin'}`);
+                }
+              }
+            };
+
             return (
               <div
                 key={item.id}
@@ -650,9 +581,19 @@ export const LibraryView: React.FC<LibraryViewProps> = ({
                 className="p-3 sm:p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 hover:bg-slate-50/80 dark:hover:bg-slate-800/50 transition cursor-pointer group"
               >
                 <div className="flex items-start sm:items-center gap-3 min-w-0">
-                  <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${details.bg}`}>
-                    <TypeIcon className="w-5 h-5" />
+                  {/* Thumbnail / Icon preview box */}
+                  <div className={`w-12 h-12 rounded-xl flex items-center justify-center shrink-0 overflow-hidden border border-slate-200 dark:border-slate-800 ${details.bg}`}>
+                    {item.thumbnailUrl ? (
+                      <img 
+                        src={item.thumbnailUrl} 
+                        alt={item.title} 
+                        className="w-full h-full object-cover" 
+                      />
+                    ) : (
+                      <TypeIcon className="w-5 h-5" />
+                    )}
                   </div>
+
                   <div className="min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
                       <h4 className="text-sm sm:text-base font-black text-slate-900 dark:text-white truncate group-hover:text-emerald-700 dark:group-hover:text-emerald-400 transition-colors">
@@ -696,13 +637,22 @@ export const LibraryView: React.FC<LibraryViewProps> = ({
                     </span>
                   </div>
 
-                  <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
+                  <div className="flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
                     <button
                       onClick={() => setPreviewItem(item)}
-                      className="px-2.5 py-1.5 rounded-lg bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-950/60 dark:hover:bg-emerald-900 text-emerald-800 dark:text-emerald-300 text-xs font-bold transition flex items-center gap-1"
+                      className="px-2.5 py-1.5 rounded-lg bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold transition flex items-center gap-1"
+                      title="فتح ومعاينة"
                     >
                       <Eye className="w-3.5 h-3.5" />
                       <span className="hidden sm:inline">فتح</span>
+                    </button>
+                    <button
+                      onClick={handleListDownload}
+                      className="px-2 py-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-bold transition flex items-center gap-1 border border-slate-200 dark:border-slate-700"
+                      title="تحميل الملف"
+                    >
+                      <Download className="w-3.5 h-3.5 text-slate-600 dark:text-slate-400" />
+                      <span className="hidden sm:inline">تحميل</span>
                     </button>
                     <button
                       onClick={() => setEditingItem(item)}
@@ -725,19 +675,6 @@ export const LibraryView: React.FC<LibraryViewProps> = ({
           })}
         </div>
       )}
-
-      {/* 5. Offline & Local Storage Reassurance Notice */}
-      <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-900/60 border border-slate-200/80 dark:border-slate-800 flex items-start gap-3">
-        <div className="w-8 h-8 rounded-xl bg-emerald-100 dark:bg-emerald-950/80 text-emerald-700 dark:text-emerald-300 flex items-center justify-center shrink-0">
-          <HardDrive className="w-4 h-4" />
-        </div>
-        <div className="text-xs text-slate-600 dark:text-slate-400">
-          <strong className="block font-bold text-slate-900 dark:text-slate-200 mb-0.5">
-            تخزين محلي IndexedDB آمن ومستقل:
-          </strong>
-          جميع ملفاتك، مذكراتك ونماذج فروضك مخزنة مباشرة داخل محرك قاعدة بيانات جهازك (IndexedDB). لا يتم رفعها لأي خادم خارجي وتعمل بصفة دائمة دون الحاجة إلى الإنترنت.
-        </div>
-      </div>
 
       {/* MODALS */}
       {/* 1. Add Item Modal */}
@@ -784,7 +721,7 @@ export const LibraryView: React.FC<LibraryViewProps> = ({
               تأكيد حذف العنصر
             </h3>
             <p className="text-xs text-slate-500 dark:text-slate-400 text-center mb-5 leading-relaxed">
-              هل أنت متأكد من رغبتك في حذف هذا العنصر وملفاته نهائياً من المكتبة المحلية؟ لن يمكنك استرجاعه بعد الحذف.
+              هل أنت متأكد من رغبتك في حذف هذا العنصر وملفاته نهائياً من المكتبة؟ لن يمكنك استرجاعه بعد الحذف.
             </p>
             <div className="flex items-center justify-center gap-2.5">
               <button

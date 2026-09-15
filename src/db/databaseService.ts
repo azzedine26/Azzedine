@@ -1,4 +1,4 @@
-import { AppSettings, ClassItem, StudentItem, TeacherProfile, ScheduleSession, DayOfWeek, LessonPlan, AssessmentItem, StudentScoreRecord, SubjectSetting, AttendanceRecord, LibraryItem, LibraryFileRecord, ReminderItem } from '../types';
+import { AppSettings, ClassItem, StudentItem, TeacherProfile, ScheduleSession, DayOfWeek, LessonPlan, AssessmentItem, StudentScoreRecord, SubjectSetting, AttendanceRecord, LibraryItem, LibraryFileRecord, ReminderItem, RandomDrawRecord, RandomDrawClassState } from '../types';
 import { openDatabase, STORES, withStore } from './indexedDb';
 import { INITIAL_CLASSES, INITIAL_STUDENTS, INITIAL_TEACHER_PROFILE, INITIAL_SESSIONS, INITIAL_LESSONS, INITIAL_ASSESSMENTS, INITIAL_SUBJECT_SETTINGS, INITIAL_ATTENDANCE, INITIAL_LIBRARY_ITEMS, INITIAL_REMINDERS } from '../data/algerianData';
 
@@ -52,6 +52,8 @@ export const databaseService = {
         for (const assess of INITIAL_ASSESSMENTS) {
           await this.addAssessment(assess);
         }
+      } else {
+        await this.cleanupDuplicateAssessments();
       }
 
       // Check subject settings count (إعدادات المواد وكيفية الحساب)
@@ -554,10 +556,7 @@ export const databaseService = {
 
     const updated: AssessmentItem = {
       ...existing,
-      grades: {
-        ...existing.grades,
-        ...grades,
-      },
+      grades: grades || {},
       updatedAt: Date.now(),
     };
 
@@ -575,6 +574,122 @@ export const databaseService = {
       return new Promise((resolve, reject) => {
         const req = store.delete(id);
         req.onsuccess = () => resolve();
+        req.onerror = () => reject(req.error);
+      });
+    });
+  },
+
+  async cleanupDuplicateAssessments(): Promise<AssessmentItem[]> {
+    return withStore<AssessmentItem[]>(STORES.ASSESSMENTS, 'readwrite', (store) => {
+      return new Promise((resolve, reject) => {
+        const req = store.getAll();
+        req.onsuccess = () => {
+          const list = (req.result as AssessmentItem[]) || [];
+          const map = new Map<string, AssessmentItem>();
+          const toDeleteIds = new Set<string>();
+
+          for (const item of list) {
+            let cat: 'continuous' | 'test1' | 'test2' | 'exam' | string = item.type;
+            if (item.type === 'test') {
+              const lower = (item.title || '').toLowerCase();
+              if (lower.includes('2') || lower.includes('ثان') || lower.includes('ثاني')) {
+                cat = 'test2';
+              } else {
+                cat = 'test1';
+              }
+            } else if (item.type === 'continuous' || (item.title || '').includes('تقويم')) {
+              cat = 'continuous';
+            }
+
+            if (cat === 'continuous' || cat === 'test1' || cat === 'test2' || cat === 'exam') {
+              const itemSubj = (item.subject || '').trim().toLowerCase();
+              // Find existing match by class, trimester, category, and matching subject
+              let foundKey: string | null = null;
+              for (const [existingKey, existingItem] of map.entries()) {
+                let exCat = existingItem.type;
+                if (existingItem.type === 'test') {
+                  const exLower = (existingItem.title || '').toLowerCase();
+                  exCat = (exLower.includes('2') || exLower.includes('ثان') || exLower.includes('ثاني')) ? 'test2' : 'test1';
+                } else if (existingItem.type === 'continuous' || (existingItem.title || '').includes('تقويم')) {
+                  exCat = 'continuous';
+                }
+                const exSubj = (existingItem.subject || '').trim().toLowerCase();
+                const subjMatches = !itemSubj || !exSubj || itemSubj === exSubj;
+                if (
+                  existingItem.classId === item.classId &&
+                  existingItem.trimester === item.trimester &&
+                  exCat === cat &&
+                  subjMatches
+                ) {
+                  foundKey = existingKey;
+                  break;
+                }
+              }
+
+              const catTitle =
+                cat === 'continuous'
+                  ? 'التقويم'
+                  : cat === 'test1'
+                  ? 'الفرض الأول'
+                  : cat === 'test2'
+                  ? 'الفرض الثاني'
+                  : 'اختبار الفصل';
+
+              if (!foundKey) {
+                const normItem: AssessmentItem = {
+                  ...item,
+                  type: cat as any,
+                  title: catTitle,
+                  coefficient: 1,
+                  grades: { ...(item.grades || {}) },
+                };
+                const key = `${item.classId}_${itemSubj}_${item.trimester}_${cat}`;
+                map.set(key, normItem);
+              } else {
+                const existing = map.get(foundKey)!;
+                const mergedGrades = { ...(existing.grades || {}), ...(item.grades || {}) };
+                const existingTime = existing.updatedAt || existing.createdAt || 0;
+                const itemTime = item.updatedAt || item.createdAt || 0;
+
+                if (itemTime >= existingTime) {
+                  if (existing.id !== item.id) {
+                    toDeleteIds.add(existing.id);
+                  }
+                  const normItem: AssessmentItem = {
+                    ...item,
+                    type: cat as any,
+                    title: catTitle,
+                    coefficient: 1,
+                    grades: mergedGrades,
+                  };
+                  map.set(foundKey, normItem);
+                } else {
+                  if (item.id !== existing.id) {
+                    toDeleteIds.add(item.id);
+                  }
+                  existing.grades = mergedGrades;
+                  existing.type = cat as any;
+                  existing.title = catTitle;
+                }
+              }
+            } else {
+              map.set(item.id, item);
+            }
+          }
+
+          // Delete duplicates from IndexedDB
+          for (const id of toDeleteIds) {
+            store.delete(id);
+          }
+          // Put updated canonical items
+          for (const item of Array.from(map.values())) {
+            store.put(item);
+          }
+
+          const cleanList = Array.from(map.values());
+          cleanList.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+          resolve(cleanList);
+        };
         req.onerror = () => reject(req.error);
       });
     });
@@ -1172,5 +1287,139 @@ export const databaseService = {
       tx.oncomplete = () => resolve();
       tx.onerror = () => reject(tx.error);
     });
+  },
+
+  // ================= RANDOM DRAWS & PICKER =================
+  async getRandomDrawState(classId: string): Promise<RandomDrawClassState | null> {
+    try {
+      return await withStore<RandomDrawClassState | null>(STORES.RANDOM_DRAW_STATES, 'readonly', (store) => {
+        return new Promise((resolve) => {
+          const req = store.get(classId);
+          req.onsuccess = () => resolve(req.result || null);
+          req.onerror = () => resolve(null);
+        });
+      });
+    } catch {
+      // Safe fallback to localStorage if needed
+      try {
+        const key = `ostad_dz_draw_state_${classId}`;
+        const raw = localStorage.getItem(key);
+        return raw ? JSON.parse(raw) : null;
+      } catch {
+        return null;
+      }
+    }
+  },
+
+  async saveRandomDrawState(state: RandomDrawClassState): Promise<void> {
+    try {
+      await withStore<void>(STORES.RANDOM_DRAW_STATES, 'readwrite', (store) => {
+        return new Promise((resolve, reject) => {
+          const req = store.put(state);
+          req.onsuccess = () => resolve();
+          req.onerror = () => reject(req.error);
+        });
+      });
+    } catch (err) {
+      console.warn('Fallback saving draw state to localStorage:', err);
+    }
+    // Mirror to localStorage for instant redundancy
+    try {
+      localStorage.setItem(`ostad_dz_draw_state_${state.classId}`, JSON.stringify(state));
+    } catch (e) {
+      // ignore
+    }
+  },
+
+  async getAllRandomDrawHistory(classId?: string): Promise<RandomDrawRecord[]> {
+    try {
+      return await withStore<RandomDrawRecord[]>(STORES.RANDOM_DRAWS, 'readonly', (store) => {
+        return new Promise((resolve) => {
+          const req = store.getAll();
+          req.onsuccess = () => {
+            let list = (req.result as RandomDrawRecord[]) || [];
+            if (classId && classId !== 'all') {
+              list = list.filter((item) => item.classId === classId);
+            }
+            // Sort by timestamp desc (newest first)
+            list.sort((a, b) => b.timestamp - a.timestamp);
+            resolve(list);
+          };
+          req.onerror = () => resolve([]);
+        });
+      });
+    } catch {
+      // Fallback to localStorage
+      try {
+        const raw = localStorage.getItem('ostad_dz_draw_history');
+        let list: RandomDrawRecord[] = raw ? JSON.parse(raw) : [];
+        if (classId && classId !== 'all') {
+          list = list.filter((item) => item.classId === classId);
+        }
+        list.sort((a, b) => b.timestamp - a.timestamp);
+        return list;
+      } catch {
+        return [];
+      }
+    }
+  },
+
+  async addRandomDrawRecord(record: RandomDrawRecord): Promise<void> {
+    try {
+      await withStore<void>(STORES.RANDOM_DRAWS, 'readwrite', (store) => {
+        return new Promise((resolve, reject) => {
+          const req = store.put(record);
+          req.onsuccess = () => resolve();
+          req.onerror = () => reject(req.error);
+        });
+      });
+    } catch (err) {
+      console.warn('Fallback saving draw record to localStorage:', err);
+    }
+    // Mirror to localStorage
+    try {
+      const raw = localStorage.getItem('ostad_dz_draw_history');
+      const list: RandomDrawRecord[] = raw ? JSON.parse(raw) : [];
+      list.unshift(record);
+      // Keep last 300 records in storage
+      if (list.length > 300) list.length = 300;
+      localStorage.setItem('ostad_dz_draw_history', JSON.stringify(list));
+    } catch (e) {
+      // ignore
+    }
+  },
+
+  async clearRandomDrawHistory(classId?: string): Promise<void> {
+    try {
+      if (!classId || classId === 'all') {
+        await withStore<void>(STORES.RANDOM_DRAWS, 'readwrite', (store) => {
+          return new Promise((resolve, reject) => {
+            const req = store.clear();
+            req.onsuccess = () => resolve();
+            req.onerror = () => reject(req.error);
+          });
+        });
+        localStorage.removeItem('ostad_dz_draw_history');
+      } else {
+        // Delete only for specific class
+        const all = await this.getAllRandomDrawHistory();
+        const toKeep = all.filter((r) => r.classId !== classId);
+        await withStore<void>(STORES.RANDOM_DRAWS, 'readwrite', (store) => {
+          return new Promise((resolve, reject) => {
+            const clearReq = store.clear();
+            clearReq.onsuccess = () => {
+              for (const item of toKeep) {
+                store.put(item);
+              }
+              resolve();
+            };
+            clearReq.onerror = () => reject(clearReq.error);
+          });
+        });
+        localStorage.setItem('ostad_dz_draw_history', JSON.stringify(toKeep));
+      }
+    } catch (err) {
+      console.warn('Failed clearing draw history:', err);
+    }
   }
 };

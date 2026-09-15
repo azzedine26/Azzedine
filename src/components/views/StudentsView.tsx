@@ -56,6 +56,7 @@ export const StudentsView: React.FC<StudentsViewProps> = ({
   const [isExportingPdf, setIsExportingPdf] = useState(false);
   const [isExportingWord, setIsExportingWord] = useState(false);
   const [exportSuccessMessage, setExportSuccessMessage] = useState<string | null>(null);
+  const [exportErrorMessage, setExportErrorMessage] = useState<string | null>(null);
 
   const fallbackProfile: TeacherProfile = profile || {
     fullName: 'أستاذ المادة',
@@ -68,13 +69,16 @@ export const StudentsView: React.FC<StudentsViewProps> = ({
   const handleExportStudentsPdf = async () => {
     if (isExportingPdf || filteredStudents.length === 0) return;
     setIsExportingPdf(true);
+    setExportErrorMessage(null);
     try {
       const targetClass = selectedClassIdFilter !== 'all' ? classes.find(c => c.id === selectedClassIdFilter) : null;
       await exportStudentsListPdf(filteredStudents, targetClass, fallbackProfile);
       setExportSuccessMessage('تم تصدير قائمة التلاميذ كملف PDF بنجاح وحفظه في جهازك');
       setTimeout(() => setExportSuccessMessage(null), 4000);
-    } catch (err) {
+    } catch (err: any) {
       console.error('Failed to export students PDF:', err);
+      setExportErrorMessage(err?.message || 'تعذر تصدير قائمة التلاميذ كملف PDF، يرجى إعادة المحاولة.');
+      setTimeout(() => setExportErrorMessage(null), 6000);
     } finally {
       setIsExportingPdf(false);
     }
@@ -158,7 +162,7 @@ export const StudentsView: React.FC<StudentsViewProps> = ({
                 إدارة القوائم عبر Excel
               </span>
               <span className="text-[11px] text-slate-500 dark:text-slate-400 block">
-                تصدير واستيراد قوائم التلاميذ بصيغة <strong className="font-mono text-emerald-600 dark:text-emerald-400">.xlsx</strong> محلياً 100% دون خادم
+                تصدير واستيراد قوائم التلاميذ بصيغة <strong className="font-mono text-emerald-600 dark:text-emerald-400">.xlsx</strong> وتنسيقها
               </span>
             </div>
           </div>
@@ -225,6 +229,13 @@ export const StudentsView: React.FC<StudentsViewProps> = ({
           <div className="p-3 rounded-xl bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200 dark:border-emerald-800 text-emerald-800 dark:text-emerald-200 text-xs font-bold flex items-center gap-2 animate-in fade-in">
             <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
             <span>{exportSuccessMessage}</span>
+          </div>
+        )}
+
+        {exportErrorMessage && (
+          <div className="p-3 rounded-xl bg-rose-50 dark:bg-rose-950/60 border border-rose-200 dark:border-rose-800 text-rose-800 dark:text-rose-200 text-xs font-bold flex items-center gap-2 animate-in fade-in">
+            <span className="w-4 h-4 text-rose-600 font-bold shrink-0">⚠️</span>
+            <span>{exportErrorMessage}</span>
           </div>
         )}
 

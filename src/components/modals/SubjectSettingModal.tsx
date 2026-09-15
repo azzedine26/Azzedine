@@ -35,19 +35,19 @@ export const SubjectSettingModal: React.FC<SubjectSettingModalProps> = ({
   editingSubject,
 }) => {
   const [name, setName] = useState('');
-  const [coefficient, setCoefficient] = useState<number>(2);
+  const [coefficient, setCoefficient] = useState<number | string>(2);
   const [selectedMethod, setSelectedMethod] = useState<SubjectCalculationMethodType>('tests_avg_plus_exam_x2_div_3');
-  const [customTest1Weight, setCustomTest1Weight] = useState<number>(1);
-  const [customTest2Weight, setCustomTest2Weight] = useState<number>(1);
-  const [customExamWeight, setCustomExamWeight] = useState<number>(2);
+  const [customTest1Weight, setCustomTest1Weight] = useState<number | string>(1);
+  const [customTest2Weight, setCustomTest2Weight] = useState<number | string>(1);
+  const [customExamWeight, setCustomExamWeight] = useState<number | string>(2);
 
   // Interactive Live Preview / Test Simulator
-  const [simTest1Score, setSimTest1Score] = useState<number>(14);
-  const [simTest1Max, setSimTest1Max] = useState<number>(20);
-  const [simTest2Score, setSimTest2Score] = useState<number>(16);
-  const [simTest2Max, setSimTest2Max] = useState<number>(20);
-  const [simExamScore, setSimExamScore] = useState<number>(15);
-  const [simExamMax, setSimExamMax] = useState<number>(20);
+  const [simTest1Score, setSimTest1Score] = useState<number | string>(14);
+  const [simTest1Max] = useState<number>(20);
+  const [simTest2Score, setSimTest2Score] = useState<number | string>(16);
+  const [simTest2Max] = useState<number>(20);
+  const [simExamScore, setSimExamScore] = useState<number | string>(15);
+  const [simExamMax] = useState<number>(20);
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showExplanation, setShowExplanation] = useState(false);
@@ -55,7 +55,11 @@ export const SubjectSettingModal: React.FC<SubjectSettingModalProps> = ({
   useEffect(() => {
     if (editingSubject) {
       setName(editingSubject.name);
-      setCoefficient(editingSubject.coefficient || 1);
+      setCoefficient(
+        editingSubject.coefficient !== undefined && editingSubject.coefficient !== null
+          ? editingSubject.coefficient
+          : 1
+      );
       if (editingSubject.calculationMethod) {
         setSelectedMethod(editingSubject.calculationMethod.method);
         setCustomTest1Weight(editingSubject.calculationMethod.customTest1Weight ?? 1);
@@ -72,27 +76,45 @@ export const SubjectSettingModal: React.FC<SubjectSettingModalProps> = ({
     }
   }, [editingSubject, isOpen]);
 
+  // Safe parsing helper for scores
+  const parseSimScore = (val: number | string): number | null => {
+    if (typeof val === 'number') return isNaN(val) ? null : val;
+    if (typeof val === 'string' && val.trim() === '') return null;
+    const parsed = parseFloat(String(val).trim());
+    return isNaN(parsed) ? null : Math.max(0, Math.min(20, parsed));
+  };
+
+  const parseWeight = (val: number | string, fallback: number): number => {
+    if (typeof val === 'number') return isNaN(val) || val <= 0 ? fallback : val;
+    const parsed = parseFloat(String(val).trim());
+    return !isNaN(parsed) && parsed > 0 ? parsed : fallback;
+  };
+
+  const parsedCoeff = typeof coefficient === 'number' 
+    ? (isNaN(coefficient) || coefficient <= 0 ? 1 : coefficient)
+    : (parseInt(String(coefficient).trim()) > 0 ? parseInt(String(coefficient).trim()) : 1);
+
   // Build current SubjectSetting candidate for live simulation
   const currentCalculationConfig: SubjectCalculationConfig = {
     method: selectedMethod,
-    customTest1Weight: customTest1Weight > 0 ? customTest1Weight : 1,
-    customTest2Weight: customTest2Weight > 0 ? customTest2Weight : 1,
-    customExamWeight: customExamWeight > 0 ? customExamWeight : 2,
+    customTest1Weight: parseWeight(customTest1Weight, 1),
+    customTest2Weight: parseWeight(customTest2Weight, 1),
+    customExamWeight: parseWeight(customExamWeight, 2),
     description: SUBJECT_CALCULATION_METHODS.find((m) => m.id === selectedMethod)?.formula,
   };
 
   const dummySubjectSetting: SubjectSetting = {
     id: editingSubject?.id || 'sim_subject',
     name: name || 'المادة',
-    coefficient: coefficient > 0 ? coefficient : 1,
+    coefficient: parsedCoeff > 0 ? parsedCoeff : 1,
     calculationMethod: currentCalculationConfig,
   };
 
   // Real-time calculation result
   const liveResult = calculateSubjectGrade(
-    { rawScore: simTest1Score, maxScore: simTest1Max },
-    { rawScore: simTest2Score, maxScore: simTest2Max },
-    { rawScore: simExamScore, maxScore: simExamMax },
+    { rawScore: parseSimScore(simTest1Score), maxScore: simTest1Max },
+    { rawScore: parseSimScore(simTest2Score), maxScore: simTest2Max },
+    { rawScore: parseSimScore(simExamScore), maxScore: simExamMax },
     dummySubjectSetting
   );
 
@@ -104,15 +126,20 @@ export const SubjectSettingModal: React.FC<SubjectSettingModalProps> = ({
       alert('يرجى كتابة اسم المادة');
       return;
     }
-    if (coefficient <= 0) {
-      alert('معامل المادة يجب أن يكون أكبر من الصفر');
+
+    const finalCoeff = typeof coefficient === 'number'
+      ? coefficient
+      : parseInt(String(coefficient).trim());
+
+    if (isNaN(finalCoeff) || finalCoeff <= 0) {
+      alert('معامل المادة يجب أن يكون رقماً أكبر من الصفر');
       return;
     }
 
     const payload: SubjectSetting = {
       id: editingSubject?.id || `subj_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`,
       name: name.trim(),
-      coefficient: Number(coefficient),
+      coefficient: Math.min(10, Math.max(1, finalCoeff)),
       calculationMethod: currentCalculationConfig,
       createdAt: editingSubject?.createdAt || Date.now(),
       updatedAt: Date.now(),
@@ -203,7 +230,15 @@ export const SubjectSettingModal: React.FC<SubjectSettingModalProps> = ({
                     step="1"
                     max="10"
                     value={coefficient}
-                    onChange={(e) => setCoefficient(Math.max(1, parseInt(e.target.value) || 1))}
+                    onChange={(e) => setCoefficient(e.target.value)}
+                    onBlur={() => {
+                      const p = parseInt(String(coefficient).trim());
+                      if (isNaN(p) || p < 1) {
+                        setCoefficient(1);
+                      } else {
+                        setCoefficient(Math.min(10, p));
+                      }
+                    }}
                     className="w-full h-10 px-2 text-center rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-sm font-black focus:ring-2 focus:ring-emerald-500 focus:outline-hidden"
                   />
                   <div className="flex gap-1 shrink-0">
@@ -213,7 +248,7 @@ export const SubjectSettingModal: React.FC<SubjectSettingModalProps> = ({
                         type="button"
                         onClick={() => setCoefficient(num)}
                         className={`w-7 h-10 rounded-lg border text-xs font-bold transition ${
-                          coefficient === num
+                          Number(coefficient) === num
                             ? 'border-emerald-600 bg-emerald-50 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300'
                             : 'border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 hover:bg-slate-50'
                         }`}
@@ -290,53 +325,6 @@ export const SubjectSettingModal: React.FC<SubjectSettingModalProps> = ({
                   );
                 })}
               </div>
-
-              {/* Custom weights inputs if custom_weights is chosen */}
-              {selectedMethod === 'custom_weights' && (
-                <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 space-y-2 animate-in fade-in duration-150">
-                  <span className="text-xs font-bold text-slate-700 dark:text-slate-300 block">
-                    حدد أوزان التقييمات في طريقة الحساب:
-                  </span>
-                  <div className="grid grid-cols-3 gap-3">
-                    <div>
-                      <label className="text-[11px] text-slate-500 block mb-1">وزن فرض 1:</label>
-                      <input
-                        type="number"
-                        min="0.5"
-                        step="0.5"
-                        max="10"
-                        value={customTest1Weight}
-                        onChange={(e) => setCustomTest1Weight(parseFloat(e.target.value) || 1)}
-                        className="w-full h-9 px-2 text-center rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs font-bold"
-                      />
-                    </div>
-                    <div>
-                      <label className="text-[11px] text-slate-500 block mb-1">وزن فرض 2:</label>
-                      <input
-                        type="number"
-                        min="0.5"
-                        step="0.5"
-                        max="10"
-                        value={customTest2Weight}
-                        onChange={(e) => setCustomTest2Weight(parseFloat(e.target.value) || 1)}
-                        className="w-full h-9 px-2 text-center rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs font-bold"
-                      />
-                    </div>
-                    <div>
-                      <label className="text-[11px] text-slate-500 block mb-1">وزن الاختبار:</label>
-                      <input
-                        type="number"
-                        min="0.5"
-                        step="0.5"
-                        max="10"
-                        value={customExamWeight}
-                        onChange={(e) => setCustomExamWeight(parseFloat(e.target.value) || 2)}
-                        className="w-full h-9 px-2 text-center rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs font-bold"
-                      />
-                    </div>
-                  </div>
-                </div>
-              )}
             </div>
 
             {/* 3. Interactive Live Simulator: "وأن يظهر له الناتج بوضوح" */}
@@ -360,59 +348,51 @@ export const SubjectSettingModal: React.FC<SubjectSettingModalProps> = ({
                 </span>
               </div>
 
-              {/* Sample Grades Inputs */}
+              {/* Sample Grades Inputs: ONE input per assessment */}
               <div className="grid grid-cols-3 gap-2">
                 {/* Test 1 */}
                 <div className="bg-white dark:bg-slate-900 p-2.5 rounded-xl border border-slate-200 dark:border-slate-800">
                   <span className="text-[11px] font-bold text-emerald-700 dark:text-emerald-400 block mb-1 text-center">
-                    فرض 1
+                    الفرض الأول
                   </span>
-                  <div className="flex items-center justify-center gap-1">
-                    <input
-                      type="number"
-                      min="0"
-                      max={simTest1Max}
-                      step="0.25"
-                      value={simTest1Score}
-                      onChange={(e) => setSimTest1Score(parseFloat(e.target.value) || 0)}
-                      className="w-14 h-8 text-center font-bold text-xs rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800"
-                    />
-                    <span className="text-xs text-slate-400">/</span>
-                    <input
-                      type="number"
-                      min="5"
-                      max="40"
-                      value={simTest1Max}
-                      onChange={(e) => setSimTest1Max(parseInt(e.target.value) || 20)}
-                      className="w-10 h-8 text-center text-[10px] text-slate-500 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800"
-                    />
+                  <div className="flex flex-col items-center justify-center gap-1">
+                    <span className="text-[10px] text-slate-500 font-medium">النقطة المتحصل عليها:</span>
+                    <div className="flex items-center justify-center gap-1">
+                      <input
+                        type="number"
+                        min="0"
+                        max="20"
+                        step="0.25"
+                        value={simTest1Score}
+                        onChange={(e) => setSimTest1Score(e.target.value)}
+                        className="w-16 h-8 text-center font-bold text-xs rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 focus:ring-2 focus:ring-emerald-500"
+                        title="الفرض الأول: النقطة المتحصل عليها"
+                      />
+                      <span className="text-xs text-slate-400 font-bold">/ 20</span>
+                    </div>
                   </div>
                 </div>
 
                 {/* Test 2 */}
                 <div className="bg-white dark:bg-slate-900 p-2.5 rounded-xl border border-slate-200 dark:border-slate-800">
                   <span className="text-[11px] font-bold text-teal-700 dark:text-teal-400 block mb-1 text-center">
-                    فرض 2
+                    الفرض الثاني
                   </span>
-                  <div className="flex items-center justify-center gap-1">
-                    <input
-                      type="number"
-                      min="0"
-                      max={simTest2Max}
-                      step="0.25"
-                      value={simTest2Score}
-                      onChange={(e) => setSimTest2Score(parseFloat(e.target.value) || 0)}
-                      className="w-14 h-8 text-center font-bold text-xs rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800"
-                    />
-                    <span className="text-xs text-slate-400">/</span>
-                    <input
-                      type="number"
-                      min="5"
-                      max="40"
-                      value={simTest2Max}
-                      onChange={(e) => setSimTest2Max(parseInt(e.target.value) || 20)}
-                      className="w-10 h-8 text-center text-[10px] text-slate-500 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800"
-                    />
+                  <div className="flex flex-col items-center justify-center gap-1">
+                    <span className="text-[10px] text-slate-500 font-medium">النقطة المتحصل عليها:</span>
+                    <div className="flex items-center justify-center gap-1">
+                      <input
+                        type="number"
+                        min="0"
+                        max="20"
+                        step="0.25"
+                        value={simTest2Score}
+                        onChange={(e) => setSimTest2Score(e.target.value)}
+                        className="w-16 h-8 text-center font-bold text-xs rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 focus:ring-2 focus:ring-teal-500"
+                        title="الفرض الثاني: النقطة المتحصل عليها"
+                      />
+                      <span className="text-xs text-slate-400 font-bold">/ 20</span>
+                    </div>
                   </div>
                 </div>
 
@@ -421,25 +401,21 @@ export const SubjectSettingModal: React.FC<SubjectSettingModalProps> = ({
                   <span className="text-[11px] font-bold text-purple-700 dark:text-purple-400 block mb-1 text-center">
                     الاختبار
                   </span>
-                  <div className="flex items-center justify-center gap-1">
-                    <input
-                      type="number"
-                      min="0"
-                      max={simExamMax}
-                      step="0.25"
-                      value={simExamScore}
-                      onChange={(e) => setSimExamScore(parseFloat(e.target.value) || 0)}
-                      className="w-14 h-8 text-center font-bold text-xs rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800"
-                    />
-                    <span className="text-xs text-slate-400">/</span>
-                    <input
-                      type="number"
-                      min="5"
-                      max="40"
-                      value={simExamMax}
-                      onChange={(e) => setSimExamMax(parseInt(e.target.value) || 20)}
-                      className="w-10 h-8 text-center text-[10px] text-slate-500 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800"
-                    />
+                  <div className="flex flex-col items-center justify-center gap-1">
+                    <span className="text-[10px] text-slate-500 font-medium">النقطة المتحصل عليها:</span>
+                    <div className="flex items-center justify-center gap-1">
+                      <input
+                        type="number"
+                        min="0"
+                        max="20"
+                        step="0.25"
+                        value={simExamScore}
+                        onChange={(e) => setSimExamScore(e.target.value)}
+                        className="w-16 h-8 text-center font-bold text-xs rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 focus:ring-2 focus:ring-purple-500"
+                        title="الاختبار: النقطة المتحصل عليها"
+                      />
+                      <span className="text-xs text-slate-400 font-bold">/ 20</span>
+                    </div>
                   </div>
                 </div>
               </div>
