@@ -38,7 +38,6 @@ interface DashboardViewProps {
   onOpenAddClass: () => void;
   onOpenAddStudent: () => void;
   onOpenAddLesson?: () => void;
-  onOpenAddAssessment?: () => void;
   onSelectClass: (classId: string) => void;
 }
 
@@ -56,7 +55,6 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   onOpenAddClass,
   onOpenAddStudent,
   onOpenAddLesson,
-  onOpenAddAssessment,
   onSelectClass,
 }) => {
   // Compute Stats
@@ -684,16 +682,6 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           </div>
 
           <div className="flex items-center gap-2">
-            {onOpenAddAssessment && (
-              <button
-                onClick={onOpenAddAssessment}
-                disabled={classes.length === 0}
-                className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-50 dark:bg-amber-950/80 text-amber-700 dark:text-amber-300 hover:bg-amber-100 text-xs font-bold border border-amber-200 dark:border-amber-800/80 transition disabled:opacity-50"
-              >
-                <Plus className="w-3.5 h-3.5" />
-                <span>تقييم جديد</span>
-              </button>
-            )}
             <button
               onClick={() => onNavigateTab('grades')}
               className="text-xs font-bold text-amber-600 dark:text-amber-400 hover:underline flex items-center gap-1"
@@ -707,17 +695,16 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         {recentAssessments.length === 0 ? (
           <div className="p-6 text-center rounded-2xl bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800">
             <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400">
-              لم تسجل أي تقييم أو فرض بعد. يمكنك البدء الآن بإضافة أول تقييم ورصد نقاط تلاميذك!
+              يمكنك متابعة رصد نقاط التقويم والفروض والاختبارات مباشرة من صفحة النقاط والمعدلات.
             </p>
-            {onOpenAddAssessment && (
-              <button
-                onClick={onOpenAddAssessment}
-                disabled={classes.length === 0}
-                className="mt-3 px-4 py-2 rounded-xl bg-amber-600 text-white text-xs font-bold hover:bg-amber-700 transition disabled:opacity-50"
-              >
-                + إنشاء أول تقييم
-              </button>
-            )}
+            <button
+              onClick={() => onNavigateTab('grades')}
+              disabled={classes.length === 0}
+              className="mt-3 px-4 py-2 rounded-xl bg-amber-600 text-white text-xs font-bold hover:bg-amber-700 transition disabled:opacity-50 inline-flex items-center gap-1.5"
+            >
+              <span>فتح صفحة النقاط ورصد المعدلات</span>
+              <ArrowLeft className="w-3.5 h-3.5" />
+            </button>
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-3 gap-3.5">

@@ -127,7 +127,7 @@ export const StudentSubjectBreakdownModal: React.FC<StudentSubjectBreakdownModal
               {/* Test 1 */}
               <div className="p-3 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-center">
                 <span className="text-[11px] font-bold text-emerald-700 dark:text-emerald-400 block mb-1">
-                  فرض 1
+                  الفرض الأول
                 </span>
                 {test1.isAbsent ? (
                   <span className="text-xs font-bold text-amber-600">غائب</span>
@@ -136,12 +136,7 @@ export const StudentSubjectBreakdownModal: React.FC<StudentSubjectBreakdownModal
                     <span className="text-base font-black text-slate-900 dark:text-white">
                       {test1.rawScore}
                     </span>
-                    <span className="text-[10px] text-slate-400 block">من {test1.maxScore}</span>
-                    {test1.maxScore !== 20 && test1.normalizedScore !== null && (
-                      <span className="text-[9px] text-emerald-600 block mt-0.5">
-                        ({test1.normalizedScore.toFixed(2)}/20)
-                      </span>
-                    )}
+                    <span className="text-[10px] text-slate-400 block">من 20</span>
                   </>
                 ) : (
                   <span className="text-xs text-slate-400">غير مدخل</span>
@@ -151,7 +146,7 @@ export const StudentSubjectBreakdownModal: React.FC<StudentSubjectBreakdownModal
               {/* Test 2 */}
               <div className="p-3 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-center">
                 <span className="text-[11px] font-bold text-teal-700 dark:text-teal-400 block mb-1">
-                  فرض 2
+                  الفرض الثاني
                 </span>
                 {test2.isAbsent ? (
                   <span className="text-xs font-bold text-amber-600">غائب</span>
@@ -160,12 +155,7 @@ export const StudentSubjectBreakdownModal: React.FC<StudentSubjectBreakdownModal
                     <span className="text-base font-black text-slate-900 dark:text-white">
                       {test2.rawScore}
                     </span>
-                    <span className="text-[10px] text-slate-400 block">من {test2.maxScore}</span>
-                    {test2.maxScore !== 20 && test2.normalizedScore !== null && (
-                      <span className="text-[9px] text-teal-600 block mt-0.5">
-                        ({test2.normalizedScore.toFixed(2)}/20)
-                      </span>
-                    )}
+                    <span className="text-[10px] text-slate-400 block">من 20</span>
                   </>
                 ) : (
                   <span className="text-xs text-slate-400">غير مدخل</span>

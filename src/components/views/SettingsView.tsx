@@ -30,6 +30,7 @@ import {
   SECONDARY_SUBJECTS_LIST
 } from '../../data/algerianData';
 import { usePWAInstall } from '../../hooks/usePWAInstall';
+import { databaseService } from '../../db/databaseService';
 import { SubjectSettingsSection } from '../settings/SubjectSettingsSection';
 
 interface SettingsViewProps {
@@ -37,7 +38,7 @@ interface SettingsViewProps {
   theme: ThemeMode;
   onThemeChange: (theme: ThemeMode) => void;
   onSaveProfile: (profile: TeacherProfile) => Promise<void>;
-  onSaveStage?: (stage: EducationalStage, specializedSubject: string) => Promise<void>;
+  onSaveStage?: (stage: EducationalStage, specializedSubject: string, subjectCoefficient?: number | null) => Promise<void>;
   onOpenStageWizard?: () => void;
   onExportBackup: () => Promise<void>;
   onImportBackup: (jsonString: string) => Promise<{ classesCount: number; studentsCount: number }>;
@@ -45,6 +46,7 @@ interface SettingsViewProps {
   classesCount: number;
   studentsCount: number;
   subjectSettings?: SubjectSetting[];
+  onSaveSubjectSetting?: (setting: SubjectSetting) => Promise<void> | void;
   onOpenAddSubject?: () => void;
   onOpenEditSubject?: (subject: SubjectSetting) => void;
   onDeleteSubject?: (subject: SubjectSetting) => void;
@@ -63,6 +65,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   classesCount,
   studentsCount,
   subjectSettings = [],
+  onSaveSubjectSetting,
   onOpenAddSubject,
   onOpenEditSubject,
   onDeleteSubject,
@@ -75,6 +78,68 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   const [customSpecializedInput, setCustomSpecializedInput] = useState<string>('');
   const [stageSavedFeedback, setStageSavedFeedback] = useState(false);
   const [stageError, setStageError] = useState<string | null>(null);
+
+  // Active chosen subject name derived from selection
+  const currentSelectedSubjectName = (customSpecializedInput.trim() || specializedSubject.trim() || settings.profile.subject || '').trim();
+
+  // Subject Coefficient for the selected subject (empty string if no coefficient set, never forced to 1 or 0)
+  const [selectedSubjectCoeff, setSelectedSubjectCoeff] = useState<string>('');
+
+  // Sync coefficient when currentSelectedSubjectName or subjectSettings change
+  useEffect(() => {
+    if (!currentSelectedSubjectName) {
+      setSelectedSubjectCoeff('');
+      return;
+    }
+    const matched = subjectSettings.find(
+      (s) => (s?.name || '').trim().toLowerCase() === currentSelectedSubjectName.toLowerCase()
+    );
+    if (matched && typeof matched.coefficient === 'number' && !isNaN(matched.coefficient)) {
+      setSelectedSubjectCoeff(String(matched.coefficient));
+    } else {
+      setSelectedSubjectCoeff('');
+    }
+  }, [currentSelectedSubjectName, subjectSettings]);
+
+  // Handler to update and persist the selected subject's coefficient directly
+  const handleSelectedSubjectCoeffChange = async (val: string) => {
+    setSelectedSubjectCoeff(val);
+    const targetSubj = currentSelectedSubjectName;
+    if (!targetSubj) return;
+
+    let parsedCoeff: number | null = null;
+    const trimmed = val.trim();
+    if (trimmed !== '') {
+      const num = parseFloat(trimmed);
+      if (!isNaN(num) && num >= 0) {
+        parsedCoeff = Math.min(10, num);
+      }
+    }
+
+    const existing = subjectSettings.find(
+      (s) => (s?.name || '').trim().toLowerCase() === targetSubj.toLowerCase()
+    );
+
+    const updatedSetting: SubjectSetting = {
+      id: existing?.id || `subj-setting-${targetSubj.replace(/\s+/g, '_')}`,
+      name: targetSubj,
+      coefficient: parsedCoeff as any,
+      calculationMethod: existing?.calculationMethod || {
+        method: 'tests_avg_plus_exam_x2_div_3',
+        customTest1Weight: 1,
+        customTest2Weight: 1,
+        customExamWeight: 2,
+        description: '((فرض 1 + فرض 2) ÷ 2 + الاختبار × 2) ÷ 3',
+      },
+      createdAt: existing?.createdAt || Date.now(),
+      updatedAt: Date.now(),
+    };
+
+    await databaseService.saveSubjectSetting(updatedSetting);
+    if (onSaveSubjectSetting) {
+      await onSaveSubjectSetting(updatedSetting);
+    }
+  };
 
   // Profile Form state
   const [fullName, setFullName] = useState(settings.profile.fullName || '');
@@ -122,8 +187,39 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
       return;
     }
 
+    let parsedCoeff: number | null = null;
+    if (selectedSubjectCoeff.trim() !== '') {
+      const num = parseFloat(selectedSubjectCoeff.trim());
+      if (!isNaN(num) && num >= 0) {
+        parsedCoeff = Math.min(10, num);
+      }
+    }
+
+    // Save subject setting to ensure coefficient is persisted
+    const existing = subjectSettings.find(
+      (s) => (s?.name || '').trim().toLowerCase() === finalSpec.toLowerCase()
+    );
+    const updatedSetting: SubjectSetting = {
+      id: existing?.id || `subj-setting-${finalSpec.replace(/\s+/g, '_')}`,
+      name: finalSpec,
+      coefficient: parsedCoeff as any,
+      calculationMethod: existing?.calculationMethod || {
+        method: 'tests_avg_plus_exam_x2_div_3',
+        customTest1Weight: 1,
+        customTest2Weight: 1,
+        customExamWeight: 2,
+        description: '((فرض 1 + فرض 2) ÷ 2 + الاختبار × 2) ÷ 3',
+      },
+      createdAt: existing?.createdAt || Date.now(),
+      updatedAt: Date.now(),
+    };
+    await databaseService.saveSubjectSetting(updatedSetting);
+    if (onSaveSubjectSetting) {
+      await onSaveSubjectSetting(updatedSetting);
+    }
+
     if (onSaveStage) {
-      await onSaveStage(stage, finalSpec);
+      await onSaveStage(stage, finalSpec, parsedCoeff);
     } else {
       await onSaveProfile({
         ...settings.profile,
@@ -442,6 +538,81 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
               placeholder="مثال: هندسة الطرائق، الإعلام الآلي، الفلسفة..."
               className="w-full px-3 py-1.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-xs font-medium focus:outline-hidden focus:ring-2 focus:ring-sky-500/40"
             />
+          </div>
+
+          {/* Selected Subject & Coefficient Configuration (معامل المادة) */}
+          <div className="mt-3 p-3.5 sm:p-4 rounded-xl bg-white dark:bg-slate-900 border-2 border-emerald-500/40 dark:border-emerald-500/30 shadow-xs space-y-3">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div>
+                <span className="text-[11px] font-bold text-slate-400 block mb-0.5">المادة المختارة حالياً:</span>
+                <div className="flex items-center gap-2">
+                  <div className="w-8 h-8 rounded-lg bg-emerald-100 dark:bg-emerald-950 text-emerald-600 dark:text-emerald-400 flex items-center justify-center font-bold">
+                    <BookOpen className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <h4 className="font-black text-sm sm:text-base text-slate-900 dark:text-white flex items-center gap-1.5">
+                      <span>{currentSelectedSubjectName || 'لم يتم اختيار مادة بعد'}</span>
+                    </h4>
+                    <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-semibold">
+                      إعداد مركزي موحد للمادة لجميع الأقسام
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Coefficient Input */}
+              <div className="flex items-center gap-2.5 bg-slate-50 dark:bg-slate-800/90 p-2.5 rounded-xl border border-slate-200 dark:border-slate-700 self-start sm:self-auto">
+                <div className="text-right">
+                  <label className="block text-xs font-black text-slate-800 dark:text-slate-200">
+                    معامل المادة:
+                  </label>
+                  <span className="text-[10px] text-slate-400">
+                    (المعامل الوحيد للمادة)
+                  </span>
+                </div>
+                
+                <input
+                  type="number"
+                  min="0.5"
+                  max="10"
+                  step="0.5"
+                  placeholder="—"
+                  value={selectedSubjectCoeff}
+                  onChange={(e) => handleSelectedSubjectCoeffChange(e.target.value)}
+                  className="w-16 h-10 text-center font-black text-base rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-emerald-700 dark:text-emerald-400 focus:outline-hidden focus:ring-2 focus:ring-emerald-500 font-mono shadow-xs"
+                  title="معامل المادة (المعامل الوحيد للمادة)"
+                />
+
+                <div className="flex gap-1 shrink-0">
+                  {[1, 2, 3, 4, 5].map((val) => (
+                    <button
+                      key={val}
+                      type="button"
+                      onClick={() => handleSelectedSubjectCoeffChange(String(val))}
+                      className={`w-7 h-10 rounded-lg text-xs font-bold border transition ${
+                        selectedSubjectCoeff === String(val)
+                          ? 'bg-emerald-600 text-white border-emerald-600 shadow-xs'
+                          : 'bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-600 hover:border-emerald-400'
+                      }`}
+                    >
+                      {val}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            <div className="pt-2 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between text-xs">
+              <span className="text-slate-500 dark:text-slate-400 text-[11px]">
+                💡 معامل المادة يُحفظ تلقائياً في الذاكرة المحلية ويُطبق على حسابات النقاط والمعدلات لكل الأقسام التي تدرس هذه المادة.
+              </span>
+              {selectedSubjectCoeff !== '' && (
+                <span className="text-emerald-600 dark:text-emerald-400 font-bold text-[11px] flex items-center gap-1 shrink-0">
+                  <CheckCircle className="w-3.5 h-3.5" />
+                  المعامل: {selectedSubjectCoeff}
+                </span>
+              )}
+            </div>
           </div>
         </div>
 

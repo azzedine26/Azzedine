@@ -18,7 +18,6 @@ import { AddClassModal } from './components/modals/AddClassModal';
 import { AddStudentModal } from './components/modals/AddStudentModal';
 import { AddSessionModal } from './components/modals/AddSessionModal';
 import { AddLessonModal } from './components/modals/AddLessonModal';
-import { AddAssessmentModal } from './components/modals/AddAssessmentModal';
 import { AddReminderModal } from './components/modals/AddReminderModal';
 import { GradeEntryModal } from './components/modals/GradeEntryModal';
 import { ConfirmDeleteModal } from './components/modals/ConfirmDeleteModal';
@@ -94,9 +93,6 @@ export default function App() {
   const [editingLesson, setEditingLesson] = useState<LessonPlan | null>(null);
   const [defaultLessonClassId, setDefaultLessonClassId] = useState<string | undefined>(undefined);
 
-  const [isAddAssessmentOpen, setIsAddAssessmentOpen] = useState(false);
-  const [editingAssessment, setEditingAssessment] = useState<AssessmentItem | null>(null);
-  const [defaultAssessmentClassId, setDefaultAssessmentClassId] = useState<string | undefined>(undefined);
   const [gradingAssessment, setGradingAssessment] = useState<AssessmentItem | null>(null);
 
   const [isAddSubjectOpen, setIsAddSubjectOpen] = useState(false);
@@ -208,7 +204,8 @@ export default function App() {
   // ================= Educational Stage System =================
   const handleSaveEducationalStage = async (
     stage: EducationalStage, 
-    specializedSubject: string
+    specializedSubject: string,
+    subjectCoefficient?: number | null
   ) => {
     try {
       await databaseService.saveSettings({
@@ -223,17 +220,17 @@ export default function App() {
 
       if (specializedSubject.trim()) {
         const existing = await databaseService.getAllSubjectSettings();
-        const exists = existing.some((s) => s.name.trim().toLowerCase() === specializedSubject.trim().toLowerCase());
-        if (!exists) {
-          await databaseService.saveSubjectSetting({
-            id: `subj-spec-${Date.now()}`,
-            name: specializedSubject.trim(),
-            coefficient: 2,
-            calculationMethod: {
-              method: 'tests_avg_plus_exam_x2_div_3',
-            },
-          });
-        }
+        const found = existing.find((s) => s.name.trim().toLowerCase() === specializedSubject.trim().toLowerCase());
+        const finalCoeff = subjectCoefficient !== undefined ? subjectCoefficient : (found?.coefficient ?? null);
+
+        await databaseService.saveSubjectSetting({
+          id: found?.id || `subj-spec-${Date.now()}`,
+          name: specializedSubject.trim(),
+          coefficient: finalCoeff,
+          calculationMethod: found?.calculationMethod || {
+            method: 'tests_avg_plus_exam_x2_div_3',
+          },
+        });
       }
 
       const [freshSettings, freshSubjects] = await Promise.all([
@@ -451,34 +448,20 @@ export default function App() {
   };
 
   // ================= Assessment & Grade Operations =================
-  const handleOpenAddAssessment = (classId?: string) => {
-    setEditingAssessment(null);
-    setDefaultAssessmentClassId(classId);
-    setIsAddAssessmentOpen(true);
-  };
-
-  const handleEditAssessment = (assessment: AssessmentItem) => {
-    setEditingAssessment(assessment);
-    setDefaultAssessmentClassId(assessment.classId);
-    setIsAddAssessmentOpen(true);
-  };
-
   const handleSaveAssessment = async (
-    assessmentData: AssessmentItem | Omit<AssessmentItem, 'createdAt' | 'updatedAt' | 'grades'>
+    assessmentData: AssessmentItem
   ) => {
     try {
-      if (editingAssessment) {
-        const updated = await databaseService.updateAssessment(assessmentData as AssessmentItem);
+      const existing = assessments.find((a) => a.id === assessmentData.id);
+      if (existing) {
+        const updated = await databaseService.updateAssessment(assessmentData);
         setAssessments((prev) => prev.map((a) => (a.id === updated.id ? updated : a)));
-        showToast('تم تحديث بيانات التقييم بنجاح.');
       } else {
-        const created = await databaseService.addAssessment(assessmentData as AssessmentItem);
+        const created = await databaseService.addAssessment(assessmentData);
         setAssessments((prev) => [created, ...prev]);
-        showToast('تم إنشاء التقييم بنجاح.');
       }
     } catch (err) {
       console.error('Error saving assessment:', err);
-      showToast('حدث خطأ أثناء حفظ التقييم.');
     }
   };
 
@@ -860,7 +843,6 @@ export default function App() {
                   setIsAddStudentOpen(true);
                 }}
                 onOpenAddLesson={() => handleOpenAddLesson()}
-                onOpenAddAssessment={() => handleOpenAddAssessment()}
                 onSelectClass={handleViewClassStudents}
               />
             )}
@@ -935,8 +917,7 @@ export default function App() {
                 students={students}
                 profile={settings.profile}
                 subjectSettings={subjectSettings}
-                onOpenAddAssessment={handleOpenAddAssessment}
-                onEditAssessment={handleEditAssessment}
+                onEditAssessment={handleOpenGrading}
                 onDeleteAssessment={handlePromptDeleteAssessment}
                 onOpenGradeEntry={handleOpenGrading}
                 onNavigateToClasses={() => setCurrentTab('classes')}
@@ -1097,19 +1078,6 @@ export default function App() {
         defaultClassId={defaultLessonClassId}
         defaultSubject={settings.profile.subject || 'الرياضيات'}
         editingLesson={editingLesson}
-      />
-
-      <AddAssessmentModal
-        isOpen={isAddAssessmentOpen}
-        onClose={() => {
-          setIsAddAssessmentOpen(false);
-          setEditingAssessment(null);
-        }}
-        onSave={handleSaveAssessment}
-        classes={classes}
-        defaultClassId={defaultAssessmentClassId}
-        defaultSubject={settings.profile.subject || 'الرياضيات'}
-        editingAssessment={editingAssessment}
       />
 
       {gradingAssessment && (

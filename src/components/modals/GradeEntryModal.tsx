@@ -60,9 +60,10 @@ export const GradeEntryModal: React.FC<GradeEntryModalProps> = ({
 
   if (!isOpen || !assessment) return null;
 
-  const maxScore = (assessment.maxScore !== undefined && assessment.maxScore !== null && assessment.maxScore > 0)
+  const isTest = assessment.type === 'test1' || assessment.type === 'test2' || (assessment.title && (assessment.title.includes('الفرض الأول') || assessment.title.includes('الفرض الثاني') || assessment.title.includes('فرض 1') || assessment.title.includes('فرض 2')));
+  const maxScore = isTest ? 20 : ((assessment.maxScore !== undefined && assessment.maxScore !== null && assessment.maxScore > 0)
     ? assessment.maxScore
-    : 20;
+    : 20);
 
   const handleScoreChange = (studentId: string, valStr: string) => {
     if (valStr.trim() === '') {

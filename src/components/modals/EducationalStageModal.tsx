@@ -20,7 +20,8 @@ interface EducationalStageModalProps {
   isFirstLaunch?: boolean;
   currentStage?: EducationalStage;
   currentSpecializedSubject?: string;
-  onSave: (stage: EducationalStage, specializedSubject: string) => Promise<void>;
+  currentSubjectCoefficient?: number | null;
+  onSave: (stage: EducationalStage, specializedSubject: string, subjectCoefficient?: number | null) => Promise<void>;
   onClose?: () => void;
 }
 
@@ -29,12 +30,18 @@ export const EducationalStageModal: React.FC<EducationalStageModalProps> = ({
   isFirstLaunch = false,
   currentStage = 'secondary',
   currentSpecializedSubject = '',
+  currentSubjectCoefficient = null,
   onSave,
   onClose,
 }) => {
   const [selectedStage, setSelectedStage] = useState<EducationalStage>(currentStage);
   const [specializedSubject, setSpecializedSubject] = useState<string>(currentSpecializedSubject);
   const [customSubjectInput, setCustomSubjectInput] = useState<string>('');
+  const [subjectCoefficient, setSubjectCoefficient] = useState<string>(
+    typeof currentSubjectCoefficient === 'number' && !isNaN(currentSubjectCoefficient)
+      ? String(currentSubjectCoefficient)
+      : ''
+  );
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -52,9 +59,15 @@ export const EducationalStageModal: React.FC<EducationalStageModalProps> = ({
           setSpecializedSubject(SECONDARY_SUBJECTS_LIST[0]);
         }
       }
+
+      if (typeof currentSubjectCoefficient === 'number' && !isNaN(currentSubjectCoefficient)) {
+        setSubjectCoefficient(String(currentSubjectCoefficient));
+      } else {
+        setSubjectCoefficient('');
+      }
       setError(null);
     }
-  }, [isOpen, currentStage, currentSpecializedSubject]);
+  }, [isOpen, currentStage, currentSpecializedSubject, currentSubjectCoefficient]);
 
   const handleStageSelect = (stage: EducationalStage) => {
     setSelectedStage(stage);
@@ -83,9 +96,17 @@ export const EducationalStageModal: React.FC<EducationalStageModalProps> = ({
       return;
     }
 
+    let parsedCoeff: number | null = null;
+    if (subjectCoefficient.trim() !== '') {
+      const num = parseFloat(subjectCoefficient.trim());
+      if (!isNaN(num) && num >= 0) {
+        parsedCoeff = Math.min(10, num);
+      }
+    }
+
     setIsSaving(true);
     try {
-      await onSave(selectedStage, finalSpecialized);
+      await onSave(selectedStage, finalSpecialized, parsedCoeff);
       if (onClose) {
         onClose();
       }
@@ -278,6 +299,46 @@ export const EducationalStageModal: React.FC<EducationalStageModalProps> = ({
                 placeholder="مثال: الإعلام الآلي، هندسة الطرائق، لغة أجنبية..."
                 className="w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-xs font-medium focus:outline-hidden focus:ring-2 focus:ring-sky-500/40"
               />
+            </div>
+
+            {/* Subject Coefficient Field */}
+            <div className="mt-2 p-3 rounded-xl bg-white dark:bg-slate-800 border border-emerald-300 dark:border-emerald-800 flex items-center justify-between gap-3">
+              <div>
+                <label className="block text-xs font-black text-slate-800 dark:text-slate-200">
+                  معامل المادة:
+                </label>
+                <p className="text-[10px] text-slate-500 dark:text-slate-400">
+                  المعامل الموحد لمادة ({customSubjectInput.trim() || specializedSubject}) في حساب المعدلات
+                </p>
+              </div>
+              <div className="flex items-center gap-2">
+                <input
+                  type="number"
+                  min="0.5"
+                  max="10"
+                  step="0.5"
+                  placeholder="—"
+                  value={subjectCoefficient}
+                  onChange={(e) => setSubjectCoefficient(e.target.value)}
+                  className="w-16 h-9 text-center font-black text-sm rounded-lg border border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-slate-900 text-emerald-700 dark:text-emerald-400 focus:outline-hidden focus:ring-2 focus:ring-emerald-500 font-mono"
+                />
+                <div className="flex gap-1">
+                  {[1, 2, 3, 4].map((v) => (
+                    <button
+                      key={v}
+                      type="button"
+                      onClick={() => setSubjectCoefficient(String(v))}
+                      className={`w-6 h-9 rounded-md text-xs font-bold border transition ${
+                        subjectCoefficient === String(v)
+                          ? 'bg-emerald-600 text-white border-emerald-600'
+                          : 'bg-slate-50 dark:bg-slate-700 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-600'
+                      }`}
+                    >
+                      {v}
+                    </button>
+                  ))}
+                </div>
+              </div>
             </div>
           </div>
 

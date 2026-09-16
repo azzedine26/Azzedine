@@ -344,18 +344,37 @@ export async function exportGradesSheetPdf(
   const title = `محضر نقاط ومداولات مادة ${classItem.subject} - ${trimesterLabel}`;
   const subtitle = `القسم: ${classItem.name} (${classItem.grade}) • الأستاذ: ${profile.fullName || 'أستاذ المادة'} • معامل المادة: ${subjectSetting?.coefficient || 1}`;
 
-  // Filter assessments for class & trimester
+  // Filter assessments for class & trimester and strictly enforce test1 & test2 to /20
   const classAssessments = assessments
     .filter((a) => a.classId === classItem.id && (trimester === 'ALL' || a.trimester === trimester))
-    .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+    .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
+    .map((a) => {
+      const isT1 = a.type === 'test1' || (a.title && (a.title.includes('الفرض الأول') || a.title.includes('فرض 1')));
+      const isT2 = a.type === 'test2' || (a.title && (a.title.includes('الفرض الثاني') || a.title.includes('فرض 2')));
+      if (isT1) {
+        return { ...a, type: 'test1' as const, title: 'الفرض الأول', maxScore: 20 };
+      }
+      if (isT2) {
+        return { ...a, type: 'test2' as const, title: 'الفرض الثاني', maxScore: 20 };
+      }
+      return a;
+    });
 
   // Use robust grade report calculation
   const report = computeClassGradesReport(students, classAssessments, 'subject_method', subjectSetting);
 
+  const defaultCoeff = subjectSetting?.coefficient || 1;
+
   const rowsHtml = report.studentResults.map((r, idx) => {
-    const avg = r.average;
-    const avgBg = avg !== null && avg >= 10 ? '#ecfdf5' : avg !== null ? '#fff1f2' : '';
-    const avgColor = avg !== null && avg >= 10 ? '#047857' : avg !== null ? '#be123c' : '#0f172a';
+    const coeff = (typeof r.subjectCalculation?.coefficient === 'number' && r.subjectCalculation.coefficient > 0)
+      ? r.subjectCalculation.coefficient
+      : defaultCoeff;
+    const rawAvg = r.rawAverage ?? r.subjectCalculation?.rawAverageOutOf20 ?? r.average;
+    const weightedScore = r.weightedScore ?? (r.subjectCalculation?.weightedTotal !== null && r.subjectCalculation?.weightedTotal !== undefined
+      ? r.subjectCalculation.weightedTotal
+      : (rawAvg !== null ? Math.round(rawAvg * coeff * 100) / 100 : null));
+    const avgBg = r.average !== null && r.average >= 10 ? '#ecfdf5' : r.average !== null ? '#fff1f2' : '';
+    const avgColor = r.average !== null && r.average >= 10 ? '#047857' : r.average !== null ? '#be123c' : '#0f172a';
 
     const assessmentCells = classAssessments.map((a) => {
       const sc = r.scoresByAssessmentId[a.id];
@@ -374,8 +393,11 @@ export async function exportGradesSheetPdf(
         <td style="padding: 6px 8px; text-align: right; font-weight: 800; border: 1px solid #cbd5e1;">${r.student.lastName} ${r.student.firstName}</td>
         <td style="padding: 6px 4px; text-align: center; font-family: monospace; border: 1px solid #cbd5e1;">${r.student.studentNumber || '-'}</td>
         ${assessmentCells}
-        <td style="padding: 6px; text-align: center; font-weight: 900; border: 1px solid #cbd5e1; background-color: ${avgBg}; color: ${avgColor}; font-size: 12px;">
-          ${avg !== null ? avg.toFixed(2) : '—'}
+        <td style="padding: 6px; text-align: center; font-weight: 800; border: 1px solid #cbd5e1; background-color: ${avgBg}; color: ${avgColor}; font-size: 11px; font-family: monospace;">
+          ${r.average !== null ? r.average.toFixed(2) : '—'}
+        </td>
+        <td style="padding: 6px; text-align: center; font-weight: 900; border: 1px solid #cbd5e1; background-color: #f1f5f9; color: #0f172a; font-size: 11px; font-family: monospace;">
+          ${weightedScore !== null ? weightedScore.toFixed(2) : '—'}
         </td>
         <td style="padding: 6px; text-align: center; font-weight: 700; border: 1px solid #cbd5e1; font-size: 11px;">
           ${r.appraisal?.label || '—'}
@@ -387,12 +409,19 @@ export async function exportGradesSheetPdf(
     `;
   }).join('');
 
-  const assessmentHeaderCols = classAssessments.map((a) => `
-    <th style="padding: 6px 4px; text-align: center; border: 1px solid #cbd5e1;">
-      <div>${a.title}</div>
-      <div style="font-size: 9px; font-weight: normal; color: #64748b;">(/ ${a.maxScore || 20})</div>
-    </th>
-  `).join('');
+  const assessmentHeaderCols = classAssessments.map((a) => {
+    const isT1 = a.type === 'test1' || (a.title && (a.title.includes('الفرض الأول') || a.title.includes('فرض 1')));
+    const isT2 = a.type === 'test2' || (a.title && (a.title.includes('الفرض الثاني') || a.title.includes('فرض 2')));
+    const displayTitle = isT1 ? 'الفرض الأول' : isT2 ? 'الفرض الثاني' : a.title;
+    const effectiveMax = isT1 || isT2 ? 20 : (a.maxScore || 20);
+
+    return `
+      <th style="padding: 6px 4px; text-align: center; border: 1px solid #cbd5e1;">
+        <div>${displayTitle}</div>
+        <div style="font-size: 9px; font-weight: normal; color: #64748b;">(/ ${effectiveMax})</div>
+      </th>
+    `;
+  }).join('');
 
   const classAvg = report.classAverage !== null ? `${report.classAverage.toFixed(2)} / 20` : '—';
   const successRate = `${report.passRate}%`;
@@ -410,13 +439,14 @@ export async function exportGradesSheetPdf(
             <th style="padding: 7px 8px; text-align: right; border: 1px solid #cbd5e1; width: 180px;">اللقب والاسم</th>
             <th style="padding: 7px 4px; text-align: center; border: 1px solid #cbd5e1; width: 85px;">رقم التعريف</th>
             ${assessmentHeaderCols}
-            <th style="padding: 7px 6px; text-align: center; border: 1px solid #cbd5e1; width: 85px; background-color: #e2e8f0;">المعدل / 20</th>
+            <th style="padding: 7px 6px; text-align: center; border: 1px solid #cbd5e1; width: 85px; background-color: #e2e8f0;">معدل المادة (/20)</th>
+            <th style="padding: 7px 6px; text-align: center; border: 1px solid #cbd5e1; width: 85px; background-color: #cbd5e1;">النقطة بالمعامل</th>
             <th style="padding: 7px 6px; text-align: center; border: 1px solid #cbd5e1; width: 95px;">التقدير</th>
             <th style="padding: 7px 4px; text-align: center; border: 1px solid #cbd5e1; width: 45px;">الرتبة</th>
           </tr>
         </thead>
         <tbody>
-          ${rowsHtml || '<tr><td colspan="6" style="text-align: center; padding: 12px;">لا توجد بيانات مسجلة لهذا القسم</td></tr>'}
+          ${rowsHtml || `<tr><td colspan="${5 + classAssessments.length + 2}" style="text-align: center; padding: 12px;">لا توجد بيانات مسجلة لهذا القسم</td></tr>`}
         </tbody>
       </table>
 

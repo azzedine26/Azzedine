@@ -20,12 +20,10 @@ import {
   BarChart3,
   FileSpreadsheet,
   ListOrdered,
-  HelpCircle,
   Sliders,
   X,
   FileDown,
-  Loader2,
-  FileText
+  Loader2
 } from 'lucide-react';
 import { 
   AssessmentItem, 
@@ -33,10 +31,8 @@ import {
   ClassItem, 
   StudentItem, 
   Trimester, 
-  CalculationFormula, 
   TeacherProfile,
   SubjectSetting,
-  SubjectCalculationMethodType,
   StudentScoreRecord
 } from '../../types';
 import { 
@@ -49,8 +45,8 @@ import {
   SubjectCalculationDetailResult 
 } from '../../utils/gradeCalculations';
 import { StudentSubjectBreakdownModal } from '../modals/StudentSubjectBreakdownModal';
-import { getSubjectsForGradeAndStage, SUBJECT_CALCULATION_METHODS } from '../../data/algerianData';
-import { exportGradesSheetDocx } from '../../utils/docxService';
+import { getSubjectsForGradeAndStage } from '../../data/algerianData';
+import { DEFAULT_FORMULA_TOKENS, DEFAULT_FORMULA_STRING } from '../../utils/formulaParser';
 import { exportElementToPdf, exportGradesSheetPdf } from '../../utils/pdfService';
 import { databaseService } from '../../db/databaseService';
 
@@ -60,10 +56,9 @@ interface GradesViewProps {
   students: StudentItem[];
   profile: TeacherProfile;
   subjectSettings?: SubjectSetting[];
-  onOpenAddAssessment: (defaultClassId?: string) => void;
-  onEditAssessment: (assessment: AssessmentItem) => void;
-  onDeleteAssessment: (assessment: AssessmentItem) => void;
-  onOpenGradeEntry: (assessment: AssessmentItem) => void;
+  onEditAssessment?: (assessment: AssessmentItem) => void;
+  onDeleteAssessment?: (assessment: AssessmentItem) => void;
+  onOpenGradeEntry?: (assessment: AssessmentItem) => void;
   onNavigateToClasses: () => void;
   onOpenAddSubject?: () => void;
   onOpenEditSubject?: (subject: SubjectSetting) => void;
@@ -78,7 +73,6 @@ export const GradesView: React.FC<GradesViewProps> = ({
   students,
   profile,
   subjectSettings = [],
-  onOpenAddAssessment,
   onEditAssessment,
   onDeleteAssessment,
   onOpenGradeEntry,
@@ -96,14 +90,11 @@ export const GradesView: React.FC<GradesViewProps> = ({
   const [selectedType, setSelectedType] = useState<AssessmentType | 'ALL'>('ALL');
   const [selectedSubject, setSelectedSubject] = useState<string>('ALL');
   const [searchStudent, setSearchStudent] = useState<string>('');
-  const [viewMode, setViewMode] = useState<'table' | 'cards' | 'assessments'>('table');
-  const [formula, setFormula] = useState<CalculationFormula>('subject_method');
-  const [isFormulaHelpOpen, setIsFormulaHelpOpen] = useState<boolean>(false);
+  const [viewMode, setViewMode] = useState<'table' | 'cards'>('table');
   const [isPrintPreviewOpen, setIsPrintPreviewOpen] = useState<boolean>(false);
 
-  // PDF & Word export states
+  // PDF export state
   const [isExportingPdf, setIsExportingPdf] = useState<boolean>(false);
-  const [isExportingWord, setIsExportingWord] = useState<boolean>(false);
   const [exportSuccessMessage, setExportSuccessMessage] = useState<string | null>(null);
   const [exportErrorMessage, setExportErrorMessage] = useState<string | null>(null);
 
@@ -135,28 +126,6 @@ export const GradesView: React.FC<GradesViewProps> = ({
       setTimeout(() => setExportErrorMessage(null), 6000);
     } finally {
       setIsExportingPdf(false);
-    }
-  };
-
-  // Word (.docx) Export Handler
-  const handleExportGradesWord = async () => {
-    if (!activeClass || isExportingWord) return;
-    setIsExportingWord(true);
-    try {
-      await exportGradesSheetDocx(
-        activeClass,
-        assessments,
-        classStudents,
-        selectedTrimester,
-        profile,
-        effectiveSubjectSetting || undefined
-      );
-      setExportSuccessMessage('تم تصدير كشف النقاط كملف Word (.docx) قابل للتعديل بنجاح');
-      setTimeout(() => setExportSuccessMessage(null), 4000);
-    } catch (err) {
-      console.error('Failed to export Word document:', err);
-    } finally {
-      setIsExportingWord(false);
     }
   };
 
@@ -298,36 +267,8 @@ export const GradesView: React.FC<GradesViewProps> = ({
     );
   }, [localSubjectSettings, activeSubjectName]);
 
-  const [coeffInput, setCoeffInput] = useState<string>(() => {
-    const target = (activeSubjectName || '').trim().toLowerCase();
-    const found = localSubjectSettings.find(
-      (s) => (s?.name || '').trim().toLowerCase() === target
-    );
-    if (found && typeof found.coefficient === 'number' && !isNaN(found.coefficient)) {
-      return String(found.coefficient);
-    }
-    return '2';
-  });
-
-  // Keep track of active subject to update coeffInput when subject switches
-  const prevSubjectRef = useRef<string>(activeSubjectName);
-  useEffect(() => {
-    if (prevSubjectRef.current !== activeSubjectName) {
-      prevSubjectRef.current = activeSubjectName;
-      const target = (activeSubjectName || '').trim().toLowerCase();
-      const match = localSubjectSettings.find(
-        (s) => (s?.name || '').trim().toLowerCase() === target
-      );
-      if (match && typeof match.coefficient === 'number' && !isNaN(match.coefficient)) {
-        setCoeffInput(String(match.coefficient));
-      } else {
-        setCoeffInput('2');
-      }
-    }
-  }, [activeSubjectName, localSubjectSettings]);
-
   // Live Effective Subject Setting:
-  // Dynamically constructed from live coeffInput and selected calculation method.
+  // Fetches subject coefficient and custom formula automatically from Settings (localSubjectSettings).
   // Guarantees zero-lag instantaneous recalculation across the entire page!
   const effectiveSubjectSetting = useMemo<SubjectSetting>(() => {
     const target = (activeSubjectName || '').trim().toLowerCase();
@@ -335,116 +276,20 @@ export const GradesView: React.FC<GradesViewProps> = ({
       (s) => (s?.name || '').trim().toLowerCase() === target
     );
 
-    let parsedCoeff: number | null = null;
-    const trimmed = coeffInput.trim();
-    if (trimmed !== '') {
-      const num = parseFloat(trimmed);
-      if (!isNaN(num) && num >= 0) {
-        parsedCoeff = Math.min(10, num);
-      }
-    }
-
-    const currentMethod = existing?.calculationMethod?.method || 'tests_avg_plus_exam_x2_div_3';
-
     return {
       id: existing?.id || `subj-setting-${activeSubjectName.trim().replace(/\s+/g, '_')}`,
       name: activeSubjectName,
-      coefficient: parsedCoeff as any,
+      coefficient: typeof existing?.coefficient === 'number' && !isNaN(existing.coefficient) ? existing.coefficient : null,
       calculationMethod: existing?.calculationMethod || {
-        method: currentMethod,
-        customTest1Weight: 1,
-        customTest2Weight: 1,
-        customExamWeight: 2,
-        description: SUBJECT_CALCULATION_METHODS.find((m) => m.id === currentMethod)?.formula || '',
+        method: 'custom_formula',
+        customFormulaString: DEFAULT_FORMULA_STRING,
+        customFormulaTokens: [...DEFAULT_FORMULA_TOKENS],
+        description: DEFAULT_FORMULA_STRING,
       },
       createdAt: existing?.createdAt || Date.now(),
       updatedAt: Date.now(),
     };
-  }, [localSubjectSettings, activeSubjectName, coeffInput]);
-
-  // Handlers for subject coefficient & calculation method
-  const handleSubjectCoeffChange = async (newCoeffRaw: string | number) => {
-    let parsedCoeff: number | null = null;
-    if (typeof newCoeffRaw === 'number') {
-      if (!isNaN(newCoeffRaw) && newCoeffRaw >= 0) {
-        parsedCoeff = Math.min(10, newCoeffRaw);
-      }
-    } else if (typeof newCoeffRaw === 'string') {
-      const trimmed = newCoeffRaw.trim();
-      if (trimmed !== '') {
-        const num = parseFloat(trimmed);
-        if (!isNaN(num) && num >= 0) {
-          parsedCoeff = Math.min(10, num);
-        }
-      }
-    }
-
-    const currentMethod = effectiveSubjectSetting?.calculationMethod?.method || 'tests_avg_plus_exam_x2_div_3';
-    
-    const updatedSetting: SubjectSetting = {
-      id: currentSubjectSetting?.id || `subj-setting-${activeSubjectName.trim().replace(/\s+/g, '_')}`,
-      name: activeSubjectName,
-      coefficient: parsedCoeff as any,
-      calculationMethod: currentSubjectSetting?.calculationMethod || {
-        method: currentMethod,
-        customTest1Weight: 1,
-        customTest2Weight: 1,
-        customExamWeight: 2,
-        description: SUBJECT_CALCULATION_METHODS.find((m) => m.id === currentMethod)?.formula || '',
-      },
-      createdAt: currentSubjectSetting?.createdAt || Date.now(),
-      updatedAt: Date.now(),
-    };
-
-    setLocalSubjectSettings((prev) => {
-      const idx = prev.findIndex((s) => s.name.trim().toLowerCase() === activeSubjectName.trim().toLowerCase());
-      if (idx >= 0) {
-        const copy = [...prev];
-        copy[idx] = updatedSetting;
-        return copy;
-      }
-      return [...prev, updatedSetting];
-    });
-
-    await databaseService.saveSubjectSetting(updatedSetting);
-    if (onSaveSubjectSetting) {
-      await onSaveSubjectSetting(updatedSetting);
-    }
-  };
-
-  const handleCalculationMethodChange = async (newMethod: SubjectCalculationMethodType) => {
-    const coeff = effectiveSubjectSetting?.coefficient ?? 2;
-    
-    const updatedSetting: SubjectSetting = {
-      id: currentSubjectSetting?.id || `subj-setting-${activeSubjectName.trim().replace(/\s+/g, '_')}`,
-      name: activeSubjectName,
-      coefficient: coeff as any,
-      calculationMethod: {
-        method: newMethod,
-        customTest1Weight: 1,
-        customTest2Weight: 1,
-        customExamWeight: 2,
-        description: SUBJECT_CALCULATION_METHODS.find((m) => m.id === newMethod)?.formula || '',
-      },
-      createdAt: currentSubjectSetting?.createdAt || Date.now(),
-      updatedAt: Date.now(),
-    };
-
-    setLocalSubjectSettings((prev) => {
-      const idx = prev.findIndex((s) => s.name.trim().toLowerCase() === activeSubjectName.trim().toLowerCase());
-      if (idx >= 0) {
-        const copy = [...prev];
-        copy[idx] = updatedSetting;
-        return copy;
-      }
-      return [...prev, updatedSetting];
-    });
-
-    await databaseService.saveSubjectSetting(updatedSetting);
-    if (onSaveSubjectSetting) {
-      await onSaveSubjectSetting(updatedSetting);
-    }
-  };
+  }, [localSubjectSettings, activeSubjectName]);
 
   // Dedicated canonical assessments for التقويم, الفرض الأول, الفرض الثاني, and الاختبار
   const continuousAssessment = useMemo(() => {
@@ -500,7 +345,7 @@ export const GradesView: React.FC<GradesViewProps> = ({
         }
       }
     }
-    return { ...sorted[0], type: 'test1' as const, title: 'الفرض الأول', grades: mergedGrades };
+    return { ...sorted[0], type: 'test1' as const, title: 'الفرض الأول', maxScore: 20, grades: mergedGrades };
   }, [localAssessments, selectedTrimester, selectedSubject, activeClass?.id]);
 
   const test2Assessment = useMemo(() => {
@@ -528,7 +373,7 @@ export const GradesView: React.FC<GradesViewProps> = ({
         }
       }
     }
-    return { ...sorted[0], type: 'test2' as const, title: 'الفرض الثاني', grades: mergedGrades };
+    return { ...sorted[0], type: 'test2' as const, title: 'الفرض الثاني', maxScore: 20, grades: mergedGrades };
   }, [localAssessments, selectedTrimester, selectedSubject, activeClass?.id]);
 
   const examAssessment = useMemo(() => {
@@ -660,6 +505,7 @@ export const GradesView: React.FC<GradesViewProps> = ({
 
     const updatedAssessment: AssessmentItem = {
       ...targetAssessment,
+      maxScore: (category === 'test1' || category === 'test2') ? 20 : (targetAssessment.maxScore || 20),
       grades: updatedGrades,
       updatedAt: Date.now(),
     };
@@ -689,10 +535,10 @@ export const GradesView: React.FC<GradesViewProps> = ({
     }
   };
 
-  // Comprehensive report for class with canonical assessments, formula, and subject setting
+  // Comprehensive report for class with canonical assessments and manual formula subject setting
   const gradesReport = useMemo(() => {
-    return computeClassGradesReport(classStudents, canonicalAssessments, formula, effectiveSubjectSetting);
-  }, [classStudents, canonicalAssessments, formula, effectiveSubjectSetting]);
+    return computeClassGradesReport(classStudents, canonicalAssessments, 'subject_method', effectiveSubjectSetting);
+  }, [classStudents, canonicalAssessments, effectiveSubjectSetting]);
 
   // Filter student rows by search query
   const displayedStudentResults = useMemo(() => {
@@ -717,7 +563,7 @@ export const GradesView: React.FC<GradesViewProps> = ({
     (showTest1Col ? 1 : 0) +
     (showTest2Col ? 1 : 0) +
     (showExamCol ? 1 : 0) +
-    (showAverageCol ? 1 : 0) +
+    (showAverageCol ? 2 : 0) + // معدل المادة (/20) + النقطة بالمعامل
     (showAppraisalAndRankCol ? 2 : 0);
 
   const continuousAvg = useMemo(() => {
@@ -755,6 +601,35 @@ export const GradesView: React.FC<GradesViewProps> = ({
     if (vals.length === 0) return null;
     return (vals.reduce((a, b) => a + b, 0) / vals.length).toFixed(2);
   }, [examAssessment]);
+
+  // Subject coefficient and weighted points statistics (النقطة بالمعامل)
+  const currentCoeff = useMemo(() => {
+    const val = effectiveSubjectSetting?.coefficient;
+    return typeof val === 'number' && val > 0 ? val : 1;
+  }, [effectiveSubjectSetting]);
+
+  const classWeightedStats = useMemo(() => {
+    const validWeightedScores: number[] = [];
+    gradesReport.studentResults.forEach((r) => {
+      const coeff = (typeof r.subjectCalculation?.coefficient === 'number' && r.subjectCalculation.coefficient > 0)
+        ? r.subjectCalculation.coefficient
+        : currentCoeff;
+      const wScore = r.subjectCalculation?.weightedTotal !== null && r.subjectCalculation?.weightedTotal !== undefined
+        ? r.subjectCalculation.weightedTotal
+        : (r.average !== null ? Math.round(r.average * coeff * 100) / 100 : null);
+      if (wScore !== null && !isNaN(wScore)) {
+        validWeightedScores.push(wScore);
+      }
+    });
+
+    const sum = validWeightedScores.reduce((acc, v) => acc + v, 0);
+    const avg = validWeightedScores.length > 0 ? sum / validWeightedScores.length : null;
+
+    return {
+      sum: Math.round(sum * 100) / 100,
+      average: avg !== null ? Math.round(avg * 100) / 100 : null,
+    };
+  }, [gradesReport, currentCoeff]);
 
   if (classes.length === 0) {
     return (
@@ -817,21 +692,6 @@ export const GradesView: React.FC<GradesViewProps> = ({
             <span>تصدير PDF</span>
           </button>
 
-          {/* Export Word Button */}
-          <button
-            onClick={handleExportGradesWord}
-            disabled={isExportingWord || !activeClass}
-            className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 border border-blue-300 dark:border-blue-800 hover:bg-blue-100 dark:hover:bg-blue-900/60 disabled:opacity-50 text-xs sm:text-sm font-bold transition shadow-xs cursor-pointer active:scale-95"
-            title="تصدير كشف النقاط والمداولات كملف Word (.docx) قابل للتعديل"
-          >
-            {isExportingWord ? (
-              <Loader2 className="w-4 h-4 animate-spin text-blue-600" />
-            ) : (
-              <FileText className="w-4 h-4 text-blue-600" />
-            )}
-            <span>تصدير Word</span>
-          </button>
-
           {/* Printable Sheet Button */}
           <button
             onClick={() => setIsPrintPreviewOpen(true)}
@@ -840,15 +700,6 @@ export const GradesView: React.FC<GradesViewProps> = ({
           >
             <Printer className="w-4 h-4 text-slate-500" />
             <span>كشف النقاط (معاينة)</span>
-          </button>
-
-          {/* Add Assessment Button */}
-          <button
-            onClick={() => onOpenAddAssessment(activeClass?.id)}
-            className="flex items-center gap-2 px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs sm:text-sm font-bold shadow-xs transition active:scale-95"
-          >
-            <Plus className="w-4 h-4" />
-            <span>تقييم جديد</span>
           </button>
         </div>
       </div>
@@ -1015,31 +866,6 @@ export const GradesView: React.FC<GradesViewProps> = ({
           </div>
 
           <div className="flex items-center flex-wrap gap-2.5">
-            {/* Calculation formula selector */}
-            <div className="flex items-center gap-1.5 bg-slate-50 dark:bg-slate-800/80 p-1 rounded-xl border border-slate-200 dark:border-slate-700">
-              <div className="flex items-center gap-1 px-2 text-xs font-bold text-slate-500">
-                <Calculator className="w-3.5 h-3.5 text-emerald-600" />
-                <span className="hidden sm:inline">نظام الحساب:</span>
-              </div>
-              <select
-                value={formula}
-                onChange={(e) => setFormula(e.target.value as CalculationFormula)}
-                className="h-8 px-2 rounded-lg bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-200 text-xs font-bold border border-slate-200 dark:border-slate-700 focus:outline-hidden"
-              >
-                <option value="subject_method">كيفية حساب المادة المحددة (الرسمي)</option>
-                <option value="weighted">المعدل الموزون بالمعاملات</option>
-                <option value="standard_algerian">النظام الوزاري الجزائري (تقويم + فرض + اختبار×2)</option>
-                <option value="arithmetic">المعدل الحسابي البسيط</option>
-              </select>
-              <button
-                onClick={() => setIsFormulaHelpOpen(true)}
-                className="p-1 rounded-md text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition"
-                title="شرح طريقة حساب المعدل"
-              >
-                <HelpCircle className="w-4 h-4" />
-              </button>
-            </div>
-
             {/* View Mode Toggle */}
             <div className="flex items-center bg-slate-100 dark:bg-slate-800 p-1 rounded-xl text-xs font-bold">
               <button
@@ -1063,17 +889,6 @@ export const GradesView: React.FC<GradesViewProps> = ({
               >
                 <Users className="w-3.5 h-3.5" />
                 <span>بطاقات الطلاب</span>
-              </button>
-              <button
-                onClick={() => setViewMode('assessments')}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition ${
-                  viewMode === 'assessments'
-                    ? 'bg-white dark:bg-slate-900 text-emerald-700 dark:text-emerald-400 shadow-xs'
-                    : 'text-slate-600 dark:text-slate-400'
-                }`}
-              >
-                <Award className="w-3.5 h-3.5" />
-                <span>التقييمات ({classAssessments.length})</span>
               </button>
             </div>
           </div>
@@ -1128,7 +943,7 @@ export const GradesView: React.FC<GradesViewProps> = ({
           </div>
         </div>
 
-        {/* Row 3: Subject Selection, Subject Coefficient, & Calculation Method */}
+        {/* Row 3: Subject Selection & Calculation Method */}
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 pt-3 border-t border-slate-100 dark:border-slate-800/80 bg-slate-50/70 dark:bg-slate-800/30 p-3.5 rounded-2xl">
           <div className="flex items-center gap-3 flex-wrap">
             {/* Subject Selector */}
@@ -1149,58 +964,15 @@ export const GradesView: React.FC<GradesViewProps> = ({
               </select>
             </div>
 
-            {/* Subject Coefficient Field (حقل المعامل الخاص بالمادة) */}
-            <div className="flex items-center gap-2 bg-white dark:bg-slate-900 px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 shadow-2xs">
-              <label className="text-xs font-bold text-slate-700 dark:text-slate-300 whitespace-nowrap">
-                معامل المادة:
-              </label>
-              <input
-                type="number"
-                min="1"
-                max="10"
-                step="0.5"
-                placeholder="—"
-                value={coeffInput}
-                onChange={(e) => {
-                  const val = e.target.value;
-                  setCoeffInput(val);
-                  handleSubjectCoeffChange(val);
-                }}
-                className="w-14 h-7 text-center font-black text-xs rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-emerald-700 dark:text-emerald-400 focus:outline-hidden focus:ring-2 focus:ring-emerald-500 font-mono"
-                title="معامل المادة كاملة فقط (لا يوجد معامل خاص بالفرض الأول أو الفرض الثاني)"
-              />
-              <span className="text-[10px] text-slate-400 hidden sm:inline">
-                (المعامل للمادة كاملة فقط)
-              </span>
-            </div>
-
-            {/* Calculation Method Field (حقل كيفية الحساب الموجود في الصفحة) */}
+            {/* Active Subject Formula Badge */}
             <div className="flex items-center gap-2 bg-white dark:bg-slate-900 px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 shadow-2xs">
               <Calculator className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
-              <label className="text-xs font-bold text-slate-700 dark:text-slate-300 whitespace-nowrap">
-                كيفية الحساب:
-              </label>
-              <select
-                value={effectiveSubjectSetting?.calculationMethod?.method || 'tests_avg_plus_exam_x2_div_3'}
-                onChange={(e) => handleCalculationMethodChange(e.target.value as SubjectCalculationMethodType)}
-                className="h-7 px-2 text-xs font-bold rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-hidden focus:ring-2 focus:ring-emerald-500 max-w-[260px] sm:max-w-none"
-              >
-                <option value="tests_avg_plus_exam_x2_div_3">
-                  ((ف1 + ف2) ÷ 2 + اختبار × 2) ÷ 3 — معدل الفرضين + الاختبار مضاعف
-                </option>
-                <option value="tests_sum_plus_exam_x2_div_4">
-                  (ف1 + ف2 + اختبار × 2) ÷ 4 — مجموع الفرضين + الاختبار مضاعف
-                </option>
-                <option value="best_test_plus_exam_x2_div_3">
-                  (أفضل فرض + اختبار × 2) ÷ 3 — الفرض الأعلى + الاختبار مضاعف
-                </option>
-                <option value="test1_only_plus_exam_x2_div_3">
-                  (فرض 1 فقط + اختبار × 2) ÷ 3 — فرض واحد واختبار
-                </option>
-                <option value="arithmetic_mean">
-                  (فرض 1 + فرض 2 + اختبار) ÷ 3 — المتوسط الحسابي البسيط
-                </option>
-              </select>
+              <span className="text-xs font-bold text-slate-700 dark:text-slate-300 whitespace-nowrap">
+                معادلة المادة:
+              </span>
+              <span className="text-xs font-black text-emerald-700 dark:text-emerald-400 font-mono dir-ltr bg-emerald-50 dark:bg-emerald-950/50 px-2 py-0.5 rounded-lg border border-emerald-200 dark:border-emerald-800 max-w-[280px] sm:max-w-none truncate" title={effectiveSubjectSetting?.calculationMethod?.customFormulaString || DEFAULT_FORMULA_STRING}>
+                {effectiveSubjectSetting?.calculationMethod?.customFormulaString || DEFAULT_FORMULA_STRING}
+              </span>
             </div>
           </div>
 
@@ -1210,9 +982,10 @@ export const GradesView: React.FC<GradesViewProps> = ({
                 type="button"
                 onClick={() => onOpenEditSubject(effectiveSubjectSetting || currentSubjectSetting)}
                 className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-50 dark:bg-emerald-950/60 hover:bg-emerald-100 dark:hover:bg-emerald-900 text-emerald-700 dark:text-emerald-300 text-xs font-bold border border-emerald-200 dark:border-emerald-800 transition"
+                title="تعديل معادلة معدل المادة في الإعدادات"
               >
                 <Sliders className="w-3.5 h-3.5" />
-                <span>محاكي وتفاصيل الحساب</span>
+                <span>تعديل المعادلة</span>
               </button>
             ) : onOpenAddSubject ? (
               <button
@@ -1221,7 +994,7 @@ export const GradesView: React.FC<GradesViewProps> = ({
                 className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold transition shadow-xs"
               >
                 <Plus className="w-3.5 h-3.5" />
-                <span>إعداد مادة وطريقة حسابها</span>
+                <span>إعداد مادة ومعادلتها</span>
               </button>
             ) : null}
           </div>
@@ -1229,140 +1002,7 @@ export const GradesView: React.FC<GradesViewProps> = ({
       </div>
 
       {/* 5. Main Content Area */}
-      {viewMode === 'assessments' ? (
-        /* ================= ASSESSMENTS LIST VIEW ================= */
-        <div className="space-y-4">
-          <div className="flex items-center justify-between">
-            <h2 className="text-sm font-bold text-slate-700 dark:text-slate-300">
-              قائمة التقييمات المسجلة لقسم {activeClass.name} ({filteredAssessments.length})
-            </h2>
-            <button
-              onClick={() => onOpenAddAssessment(activeClass.id)}
-              className="text-xs text-emerald-600 dark:text-emerald-400 font-bold hover:underline flex items-center gap-1"
-            >
-              <Plus className="w-3.5 h-3.5" />
-              <span>إضافة تقييم جديد</span>
-            </button>
-          </div>
-
-          {filteredAssessments.length === 0 ? (
-            <div className="bg-white dark:bg-slate-900 rounded-2xl p-12 text-center border border-slate-200 dark:border-slate-800">
-              <Award className="w-12 h-12 text-slate-300 dark:text-slate-600 mx-auto mb-3" />
-              <h3 className="text-base font-bold text-slate-900 dark:text-white mb-1">
-                لا توجد تقييمات مطابقة لهذا القسم والفصل
-              </h3>
-              <p className="text-xs text-slate-500 dark:text-slate-400 mb-5">
-                اضغط على الزر أسفله لإنشاء فرض محروس، اختبار فصلي، أو تقويم مستمر.
-              </p>
-              <button
-                onClick={() => onOpenAddAssessment(activeClass.id)}
-                className="px-4 py-2 rounded-xl bg-emerald-600 text-white text-xs font-bold shadow-xs hover:bg-emerald-700 transition"
-              >
-                + إنشاء أول تقييم لهذا القسم
-              </button>
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {filteredAssessments.map((assessment) => {
-                const stats = computeAssessmentStats(assessment, students);
-                const typeInfo = ASSESSMENT_TYPE_INFO[assessment.type];
-
-                return (
-                  <div
-                    key={assessment.id}
-                    className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-5 shadow-xs hover:border-emerald-500/40 transition flex flex-col justify-between gap-4"
-                  >
-                    <div>
-                      {/* Badge header */}
-                      <div className="flex items-center justify-between gap-2 mb-2">
-                        <div className="flex items-center gap-1.5 flex-wrap">
-                          <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${typeInfo.colorBg} ${typeInfo.colorText} ${typeInfo.colorBorder}`}>
-                            {typeInfo.label}
-                          </span>
-                          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400">
-                            {TRIMESTER_INFO[assessment.trimester]?.label || 'الفصل الأول'}
-                          </span>
-                        </div>
-                        <span className="text-xs font-bold text-slate-400">
-                          {assessment.date}
-                        </span>
-                      </div>
-
-                      {/* Title & Subject */}
-                      <h3 className="text-base font-extrabold text-slate-900 dark:text-white">
-                        {assessment.title}
-                      </h3>
-                      <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                        المادة: {assessment.subject}
-                        {assessment.type !== 'test1' && assessment.type !== 'test2' && assessment.type !== 'test' && (
-                          <span> • المعامل: {assessment.coefficient}</span>
-                        )}
-                        <span> • العلامة على: /{assessment.maxScore || 20}</span>
-                      </p>
-
-                      {assessment.notes && (
-                        <p className="mt-2 text-xs text-slate-600 dark:text-slate-400 bg-slate-50 dark:bg-slate-800/60 p-2 rounded-xl line-clamp-2">
-                          {assessment.notes}
-                        </p>
-                      )}
-
-                      {/* Stats row */}
-                      <div className="mt-4 grid grid-cols-3 gap-2 p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-800 text-center">
-                        <div>
-                          <span className="text-[10px] text-slate-400 block">معدل الفرض:</span>
-                          <span className="text-sm font-black text-emerald-700 dark:text-emerald-400">
-                            {stats.average !== null ? `${stats.average}/20` : '—'}
-                          </span>
-                        </div>
-                        <div>
-                          <span className="text-[10px] text-slate-400 block">المرصودين:</span>
-                          <span className="text-xs font-bold text-slate-800 dark:text-slate-200">
-                            {stats.gradedCount} / {stats.totalStudents}
-                          </span>
-                        </div>
-                        <div>
-                          <span className="text-[10px] text-slate-400 block">الغيابات:</span>
-                          <span className={`text-xs font-bold ${stats.absentCount > 0 ? 'text-amber-600' : 'text-slate-400'}`}>
-                            {stats.absentCount}
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Actions */}
-                    <div className="flex items-center justify-between gap-2 pt-2 border-t border-slate-100 dark:border-slate-800">
-                      <div className="flex items-center gap-1.5">
-                        <button
-                          onClick={() => onEditAssessment(assessment)}
-                          className="p-2 rounded-xl text-slate-500 hover:text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-950/40 transition"
-                          title="تعديل تفاصيل التقييم"
-                        >
-                          <Edit3 className="w-4 h-4" />
-                        </button>
-                        <button
-                          onClick={() => onDeleteAssessment(assessment)}
-                          className="p-2 rounded-xl text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition"
-                          title="حذف هذا التقييم"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      </div>
-
-                      <button
-                        onClick={() => onOpenGradeEntry(assessment)}
-                        className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold shadow-xs transition active:scale-95"
-                      >
-                        <Edit3 className="w-3.5 h-3.5" />
-                        <span>رصد وتعديل النقاط</span>
-                      </button>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </div>
-      ) : viewMode === 'cards' ? (
+      {viewMode === 'cards' ? (
         /* ================= CARDS VIEW (PER-STUDENT) ================= */
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {displayedStudentResults.map((result) => {
@@ -1393,35 +1033,59 @@ export const GradesView: React.FC<GradesViewProps> = ({
                       </p>
                     </div>
 
-                    {/* Average badge with breakdown link (فقط في الاختبار والكل) */}
-                    {showAverageCol && (
-                      <div 
-                        className="text-left cursor-pointer group"
-                        onClick={() => {
-                          if (result.subjectCalculation) {
-                            setBreakdownModalData({
-                              student: result.student,
-                              calculationResult: result.subjectCalculation,
-                            });
-                          }
-                        }}
-                        title="انقر لعرض تفاصيل وخطوات كيفية الحساب"
-                      >
-                        <div className="flex items-center gap-1 justify-end">
-                          <span className={`text-lg font-black ${avg !== null && avg >= 10 ? 'text-emerald-600 dark:text-emerald-400' : avg !== null ? 'text-rose-600 dark:text-rose-400' : 'text-slate-400'}`}>
-                            {avg !== null ? `${avg}/20` : '—'}
-                          </span>
-                          {result.subjectCalculation && (
-                            <Calculator className="w-3.5 h-3.5 text-emerald-500 opacity-60 group-hover:opacity-100 transition" />
-                          )}
+                    {/* Badges for both Subject Average (/20) and Weighted Point */}
+                    {showAverageCol && (() => {
+                      const coeff = (typeof result.subjectCalculation?.coefficient === 'number' && result.subjectCalculation.coefficient > 0)
+                        ? result.subjectCalculation.coefficient
+                        : currentCoeff;
+                      const rawAvg = result.rawAverage ?? result.subjectCalculation?.rawAverageOutOf20 ?? avg;
+                      const weightedScore = result.weightedScore ?? (result.subjectCalculation?.weightedTotal !== null && result.subjectCalculation?.weightedTotal !== undefined
+                        ? result.subjectCalculation.weightedTotal
+                        : (rawAvg !== null ? Math.round(rawAvg * coeff * 100) / 100 : null));
+
+                      return (
+                        <div 
+                          className="text-left cursor-pointer group flex items-center gap-2.5"
+                          onClick={() => {
+                            if (result.subjectCalculation) {
+                              setBreakdownModalData({
+                                student: result.student,
+                                calculationResult: result.subjectCalculation,
+                              });
+                            }
+                          }}
+                          title={`معدل المادة: ${avg !== null ? avg.toFixed(2) : '—'}/20 | النقطة بالمعامل: ${weightedScore !== null ? weightedScore.toFixed(2) : '—'} (المعامل ${coeff}) - انقر للتفاصيل`}
+                        >
+                          {/* معدل المادة (/20) */}
+                          <div className="text-right">
+                            <span className="text-[10px] text-slate-500 dark:text-slate-400 block font-bold">
+                              المعدل (/20):
+                            </span>
+                            <span className={`text-base font-black ${avg !== null && avg >= 10 ? 'text-emerald-600 dark:text-emerald-400' : avg !== null ? 'text-rose-600 dark:text-rose-400' : 'text-slate-400'}`}>
+                              {avg !== null ? avg.toFixed(2) : '—'}
+                            </span>
+                          </div>
+
+                          {/* النقطة بالمعامل */}
+                          <div className="text-left border-r pr-2.5 border-slate-200 dark:border-slate-700">
+                            <span className="text-[10px] text-slate-500 dark:text-slate-400 block font-bold">
+                              النقطة بالمعامل:
+                            </span>
+                            <div className="flex items-center gap-1 justify-end">
+                              <span className={`text-base font-black ${avg !== null && avg >= 10 ? 'text-teal-600 dark:text-teal-400' : avg !== null ? 'text-rose-600 dark:text-rose-400' : 'text-slate-400'}`}>
+                                {weightedScore !== null ? weightedScore.toFixed(2) : '—'}
+                              </span>
+                              {result.subjectCalculation && (
+                                <Calculator className="w-3.5 h-3.5 text-teal-500 opacity-60 group-hover:opacity-100 transition" />
+                              )}
+                            </div>
+                            <span className="text-[10px] text-slate-400 block text-left font-mono">
+                              معامل {coeff}
+                            </span>
+                          </div>
                         </div>
-                        {result.subjectCalculation?.weightedTotal !== null && typeof result.subjectCalculation?.coefficient === 'number' && result.subjectCalculation.coefficient > 0 && (
-                          <span className="text-[10px] text-slate-400 block text-left font-mono">
-                            المجموع: {result.subjectCalculation.weightedTotal.toFixed(2)}
-                          </span>
-                        )}
-                      </div>
-                    )}
+                      );
+                    })()}
                   </div>
 
                   {showAppraisalAndRankCol && appraisal && (
@@ -1530,10 +1194,10 @@ export const GradesView: React.FC<GradesViewProps> = ({
                           الفرض 1
                         </span>
                         <span className="font-extrabold text-slate-900 dark:text-white text-xs">
-                          الفرض الأول
+                          الفرض الأول (/20)
                         </span>
                         <span className="text-[10px] text-slate-400 font-normal">
-                          النقطة المتحصل عليها (/20)
+                          النقطة المتحصل عليها
                         </span>
                       </div>
                     </th>
@@ -1547,10 +1211,10 @@ export const GradesView: React.FC<GradesViewProps> = ({
                           الفرض 2
                         </span>
                         <span className="font-extrabold text-slate-900 dark:text-white text-xs">
-                          الفرض الثاني
+                          الفرض الثاني (/20)
                         </span>
                         <span className="text-[10px] text-slate-400 font-normal">
-                          النقطة المتحصل عليها (/20)
+                          النقطة المتحصل عليها
                         </span>
                       </div>
                     </th>
@@ -1573,10 +1237,31 @@ export const GradesView: React.FC<GradesViewProps> = ({
                     </th>
                   )}
 
-                  {/* Calculated Average Column (يظهر فقط في الاختبار وفي الكل) */}
+                  {/* Calculated Subject Average Column (/20) */}
                   {showAverageCol && (
-                    <th className="p-3 font-black text-emerald-800 dark:text-emerald-300 min-w-[100px] text-center bg-emerald-50/80 dark:bg-emerald-950/50 border-r border-emerald-200 dark:border-emerald-900">
-                      معدل المادة (/20)
+                    <th className="p-3 font-black text-blue-900 dark:text-blue-300 min-w-[100px] text-center bg-blue-50/80 dark:bg-blue-950/50 border-r border-blue-200 dark:border-blue-900">
+                      <div className="flex flex-col items-center gap-0.5">
+                        <span className="font-extrabold text-xs">
+                          معدل المادة (/20)
+                        </span>
+                        <span className="text-[10px] text-blue-600/80 dark:text-blue-400/80 font-normal">
+                          قبل المعامل
+                        </span>
+                      </div>
+                    </th>
+                  )}
+
+                  {/* Calculated Weighted Score Column (النقطة بالمعامل بدون /20) */}
+                  {showAverageCol && (
+                    <th className="p-3 font-black text-emerald-800 dark:text-emerald-300 min-w-[105px] text-center bg-emerald-50/80 dark:bg-emerald-950/50 border-r border-emerald-200 dark:border-emerald-900">
+                      <div className="flex flex-col items-center gap-0.5">
+                        <span className="font-extrabold text-xs">
+                          النقطة بالمعامل
+                        </span>
+                        <span className="text-[10px] text-emerald-600/80 dark:text-emerald-400/80 font-normal">
+                          المعدل × المعامل
+                        </span>
+                      </div>
                     </th>
                   )}
 
@@ -1711,10 +1396,10 @@ export const GradesView: React.FC<GradesViewProps> = ({
                           </td>
                         )}
 
-                        {/* Calculated Average */}
+                        {/* 1. معدل المادة (/20) قبل المعامل */}
                         {showAverageCol && (
                           <td 
-                            className="p-3 text-center bg-emerald-50/40 dark:bg-emerald-950/20 border-r border-emerald-100 dark:border-emerald-900/60 font-mono cursor-pointer hover:bg-emerald-100/70 dark:hover:bg-emerald-900/40 transition group"
+                            className="p-3 text-center bg-blue-50/40 dark:bg-blue-950/20 border-r border-blue-100 dark:border-blue-900/60 font-mono cursor-pointer hover:bg-blue-100/70 dark:hover:bg-blue-900/40 transition group"
                             onClick={() => {
                               if (row.subjectCalculation) {
                                 setBreakdownModalData({
@@ -1723,31 +1408,74 @@ export const GradesView: React.FC<GradesViewProps> = ({
                                 });
                               }
                             }}
-                            title="انقر لعرض تفاصيل وخطوات كيفية الحساب"
+                            title={`معدل المادة: ${avg !== null ? avg.toFixed(2) : '—'} / 20 - انقر لعرض خطوات الحساب`}
                           >
                             {avg !== null ? (
                               <div className="flex flex-col items-center justify-center">
                                 <span
                                   className={`text-sm font-black flex items-center gap-1 ${
                                     avg >= 10
-                                      ? 'text-emerald-700 dark:text-emerald-400'
+                                      ? 'text-blue-700 dark:text-blue-400'
                                       : 'text-rose-600 dark:text-rose-400'
                                   }`}
                                 >
                                   {avg.toFixed(2)}
-                                  <Calculator className="w-3 h-3 text-emerald-500 opacity-60 group-hover:opacity-100 group-hover:scale-110 transition" />
+                                  <Calculator className="w-3 h-3 text-blue-500 opacity-60 group-hover:opacity-100 group-hover:scale-110 transition" />
                                 </span>
-                                {row.subjectCalculation?.weightedTotal !== null && typeof row.subjectCalculation?.coefficient === 'number' && row.subjectCalculation.coefficient > 0 && (
-                                  <span className="text-[10px] text-slate-500 dark:text-slate-400 font-normal font-mono">
-                                    المجموع: {row.subjectCalculation.weightedTotal.toFixed(2)}
-                                  </span>
-                                )}
+                                <span className="text-[10px] text-slate-500 dark:text-slate-400 font-normal font-mono">
+                                  من 20
+                                </span>
                               </div>
                             ) : (
                               <span className="text-slate-400">—</span>
                             )}
                           </td>
                         )}
+
+                        {/* 2. النقطة بالمعامل (معدل المادة × معامل المادة) بدون /20 */}
+                        {showAverageCol && (() => {
+                          const coeff = (typeof row.subjectCalculation?.coefficient === 'number' && row.subjectCalculation.coefficient > 0)
+                            ? row.subjectCalculation.coefficient
+                            : currentCoeff;
+                          const rawAvg = row.rawAverage ?? row.subjectCalculation?.rawAverageOutOf20 ?? avg;
+                          const weightedScore = row.weightedScore ?? (row.subjectCalculation?.weightedTotal !== null && row.subjectCalculation?.weightedTotal !== undefined
+                            ? row.subjectCalculation.weightedTotal
+                            : (rawAvg !== null ? Math.round(rawAvg * coeff * 100) / 100 : null));
+
+                          return (
+                            <td 
+                              className="p-3 text-center bg-emerald-50/40 dark:bg-emerald-950/20 border-r border-emerald-100 dark:border-emerald-900/60 font-mono cursor-pointer hover:bg-emerald-100/70 dark:hover:bg-emerald-900/40 transition group"
+                              onClick={() => {
+                                if (row.subjectCalculation) {
+                                  setBreakdownModalData({
+                                    student: row.student,
+                                    calculationResult: row.subjectCalculation,
+                                  });
+                                }
+                              }}
+                              title={`النقطة بالمعامل: ${weightedScore !== null ? weightedScore.toFixed(2) : '—'} (${rawAvg !== null ? rawAvg.toFixed(3) : '—'} × المعامل ${coeff}) - انقر لعرض خطوات الحساب`}
+                            >
+                              {weightedScore !== null ? (
+                                <div className="flex flex-col items-center justify-center">
+                                  <span
+                                    className={`text-sm font-black flex items-center gap-1 ${
+                                      avg !== null && avg >= 10
+                                        ? 'text-emerald-700 dark:text-emerald-400'
+                                        : 'text-rose-600 dark:text-rose-400'
+                                    }`}
+                                  >
+                                    {weightedScore.toFixed(2)}
+                                  </span>
+                                  <span className="text-[10px] text-slate-500 dark:text-slate-400 font-normal font-mono">
+                                    معامل {coeff}
+                                  </span>
+                                </div>
+                              ) : (
+                                <span className="text-slate-400">—</span>
+                              )}
+                            </td>
+                          );
+                        })()}
 
                         {/* Appraisal */}
                         {showAppraisalAndRankCol && (
@@ -1809,9 +1537,31 @@ export const GradesView: React.FC<GradesViewProps> = ({
                         {examAvg !== null ? `${examAvg}` : '—'}
                       </td>
                     )}
+                    {/* Footer for معدل المادة (/20) */}
                     {showAverageCol && (
-                      <td className="p-3 text-center font-black text-emerald-700 dark:text-emerald-400 bg-emerald-100/60 dark:bg-emerald-950 font-mono text-sm">
-                        {gradesReport.classAverage !== null ? gradesReport.classAverage.toFixed(2) : '—'}
+                      <td className="p-3 text-center font-black text-blue-700 dark:text-blue-400 bg-blue-100/60 dark:bg-blue-950/60 font-mono text-sm border-r border-blue-200 dark:border-blue-900">
+                        <div className="flex flex-col items-center justify-center">
+                          <span>
+                            {gradesReport.classAverage !== null ? gradesReport.classAverage.toFixed(2) : '—'}
+                          </span>
+                          <span className="text-[10px] text-slate-500 dark:text-slate-400 font-normal font-mono">
+                            معدل القسم (/20)
+                          </span>
+                        </div>
+                      </td>
+                    )}
+
+                    {/* Footer for النقطة بالمعامل */}
+                    {showAverageCol && (
+                      <td className="p-3 text-center font-black text-emerald-700 dark:text-emerald-400 bg-emerald-100/60 dark:bg-emerald-950 font-mono text-sm border-r border-emerald-200 dark:border-emerald-900">
+                        <div className="flex flex-col items-center justify-center">
+                          <span>
+                            {classWeightedStats.average !== null ? classWeightedStats.average.toFixed(2) : '—'}
+                          </span>
+                          <span className="text-[10px] text-slate-500 dark:text-slate-400 font-normal font-mono">
+                            المجموع: {classWeightedStats.sum.toFixed(2)}
+                          </span>
+                        </div>
                       </td>
                     )}
                     {showAppraisalAndRankCol && (
@@ -1827,69 +1577,7 @@ export const GradesView: React.FC<GradesViewProps> = ({
         </div>
       )}
 
-      {/* 6. Formula Explanation Modal */}
-      {isFormulaHelpOpen && (
-        <div className="fixed inset-0 z-[100] bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white dark:bg-slate-900 rounded-2xl max-w-lg w-full p-6 shadow-2xl border border-slate-200 dark:border-slate-800 animate-in fade-in zoom-in-95">
-            <div className="flex items-center justify-between mb-4 border-b border-slate-100 dark:border-slate-800 pb-3">
-              <div className="flex items-center gap-2 text-slate-900 dark:text-white font-extrabold text-base">
-                <Calculator className="w-5 h-5 text-emerald-600" />
-                <span>أنظمة وطرق حساب المعدلات في Ostad DZ</span>
-              </div>
-              <button
-                onClick={() => setIsFormulaHelpOpen(false)}
-                className="p-1 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
 
-            <div className="space-y-4 text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
-              <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700">
-                <h4 className="font-bold text-slate-900 dark:text-white mb-1">
-                  1. المعدل الموزون بالمعاملات (الافتراضي والمرن)
-                </h4>
-                <p>
-                  يتم حساب معدل كل تلميذ بضرب علامته في كل تقييم بمعامله المحدد ثم قسمة المجموع على مجموع المعاملات:
-                </p>
-                <div className="font-mono bg-white dark:bg-slate-900 p-2 rounded-lg mt-1.5 text-center text-emerald-700 dark:text-emerald-400 font-bold">
-                  المعدل = (نقطة 1 × م1 + نقطة 2 × م2 + ...) ÷ (م1 + م2 + ...)
-                </div>
-              </div>
-
-              <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700">
-                <h4 className="font-bold text-slate-900 dark:text-white mb-1">
-                  2. النظام الوزاري الجزائري للتعليم المتوسط والثانوي
-                </h4>
-                <p>
-                  يعتمد المنشور الوزاري للتقويم التربوي: التقويم المستمر (معامل 1) + معدل الفروض (معامل 1) + الاختبار الفصلي (معامل 2 أو 3):
-                </p>
-                <div className="font-mono bg-white dark:bg-slate-900 p-2 rounded-lg mt-1.5 text-center text-emerald-700 dark:text-emerald-400 font-bold">
-                  المعدل = (التقويم + معدل الفروض + الاختبار × المعامل) ÷ (2 + المعامل)
-                </div>
-              </div>
-
-              <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700">
-                <h4 className="font-bold text-slate-900 dark:text-white mb-1">
-                  3. المعدل الحسابي البسيط
-                </h4>
-                <p>
-                  جمع علامات التقييمات المقامة وقسمتها على عددها دون تطبيق أي معاملات تفضيلية.
-                </p>
-              </div>
-            </div>
-
-            <div className="mt-5 flex justify-end">
-              <button
-                onClick={() => setIsFormulaHelpOpen(false)}
-                className="px-4 py-2 rounded-xl bg-emerald-600 text-white font-bold text-xs"
-              >
-                فهمت ذلك
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* 7. Official Printable Deliberation / Grade Sheet Modal */}
       {isPrintPreviewOpen && (
@@ -1921,26 +1609,6 @@ export const GradesView: React.FC<GradesViewProps> = ({
                     <>
                       <FileDown className="w-3.5 h-3.5" />
                       <span>تصدير PDF</span>
-                    </>
-                  )}
-                </button>
-
-                {/* Export Word */}
-                <button
-                  onClick={handleExportGradesWord}
-                  disabled={isExportingWord}
-                  className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white text-xs font-bold shadow-xs transition active:scale-95 cursor-pointer"
-                  title="تصدير محضر النقاط إلى ملف Word (.docx) قابل للتعديل"
-                >
-                  {isExportingWord ? (
-                    <>
-                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                      <span>جاري التجهيز...</span>
-                    </>
-                  ) : (
-                    <>
-                      <FileText className="w-3.5 h-3.5" />
-                      <span>تصدير Word</span>
                     </>
                   )}
                 </button>
@@ -2027,7 +1695,8 @@ export const GradesView: React.FC<GradesViewProps> = ({
                       <div className="text-[10px] font-normal text-slate-600">(/20)</div>
                     </th>
                   )}
-                  <th className="border border-slate-400 p-2 bg-slate-200">المعدل / 20</th>
+                  <th className="border border-slate-400 p-2 bg-slate-100">معدل المادة (/20)</th>
+                  <th className="border border-slate-400 p-2 bg-slate-200">النقطة بالمعامل</th>
                   <th className="border border-slate-400 p-2">التقدير</th>
                   <th className="border border-slate-400 p-2 w-12">الرتبة</th>
                 </tr>
@@ -2059,9 +1728,25 @@ export const GradesView: React.FC<GradesViewProps> = ({
                         {getStudentScoreValue(r.studentId, 'exam') !== '' ? getStudentScoreValue(r.studentId, 'exam') : '—'}
                       </td>
                     )}
-                    <td className="border border-slate-300 p-1.5 text-center font-black font-mono bg-slate-50">
+                    {/* معدل المادة (/20) */}
+                    <td className="border border-slate-300 p-1.5 text-center font-bold font-mono bg-blue-50/50">
                       {r.average !== null ? r.average.toFixed(2) : '—'}
                     </td>
+                    {/* النقطة بالمعامل (بدون /20) */}
+                    {(() => {
+                      const coeff = (typeof r.subjectCalculation?.coefficient === 'number' && r.subjectCalculation.coefficient > 0)
+                        ? r.subjectCalculation.coefficient
+                        : currentCoeff;
+                      const rawAvg = r.rawAverage ?? r.subjectCalculation?.rawAverageOutOf20 ?? r.average;
+                      const weightedScore = r.weightedScore ?? (r.subjectCalculation?.weightedTotal !== null && r.subjectCalculation?.weightedTotal !== undefined
+                        ? r.subjectCalculation.weightedTotal
+                        : (rawAvg !== null ? Math.round(rawAvg * coeff * 100) / 100 : null));
+                      return (
+                        <td className="border border-slate-300 p-1.5 text-center font-black font-mono bg-emerald-50/50">
+                          {weightedScore !== null ? weightedScore.toFixed(2) : '—'}
+                        </td>
+                      );
+                    })()}
                     <td className="border border-slate-300 p-1.5 text-center font-semibold">
                       {r.appraisal?.label || '—'}
                     </td>
@@ -2076,9 +1761,11 @@ export const GradesView: React.FC<GradesViewProps> = ({
             {/* Official Summary & Signatures Footer */}
             <div className="mt-6 pt-4 border-t border-slate-300 grid grid-cols-2 text-xs">
               <div className="space-y-1">
-                <p><strong>معدل القسم:</strong> {gradesReport.classAverage ? `${gradesReport.classAverage} / 20` : '—'}</p>
+                <p><strong>معدل القسم (/20):</strong> {gradesReport.classAverage !== null ? `${gradesReport.classAverage.toFixed(2)}` : '—'}</p>
+                <p><strong>معدل القسم بالمعامل:</strong> {classWeightedStats.average !== null ? `${classWeightedStats.average.toFixed(2)}` : '—'}</p>
+                <p><strong>مجموع النقاط بالمعامل:</strong> {classWeightedStats.sum.toFixed(2)}</p>
                 <p><strong>نسبة النجاح:</strong> {gradesReport.passRate}% ({gradesReport.passCount} تلميذ ناجح)</p>
-                <p><strong>أعلى معدل:</strong> {gradesReport.highestAverage?.value || '—'}</p>
+                <p><strong>أعلى معدل (/20):</strong> {gradesReport.highestAverage?.value !== undefined && gradesReport.highestAverage?.value !== null ? `${gradesReport.highestAverage.value.toFixed(2)} (${gradesReport.highestAverage.studentName})` : '—'}</p>
               </div>
               <div className="text-left space-y-8 pl-4">
                 <p>حرر بـ: {profile.wilaya?.slice(5) || 'الجزائر'} في: {new Date().toLocaleDateString('ar-DZ')}</p>

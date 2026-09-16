@@ -143,26 +143,26 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
   const computedClassGrades = useMemo(() => {
     if (!activeClass || !classStudents.length) return [];
 
-    const test1Assessment = classAssessments.find((a) => a.type === 'test1');
-    const test2Assessment = classAssessments.find((a) => a.type === 'test2');
-    const examAssessment = classAssessments.find((a) => a.type === 'exam');
+    const test1Assessment = classAssessments.find((a) => a.type === 'test1' || (a.title && (a.title.includes('الفرض الأول') || a.title.includes('فرض 1'))));
+    const test2Assessment = classAssessments.find((a) => a.type === 'test2' || (a.title && (a.title.includes('الفرض الثاني') || a.title.includes('فرض 2'))));
+    const examAssessment = classAssessments.find((a) => a.type === 'exam' || (a.title && a.title.includes('اختبار')));
 
     const results = classStudents.map((student) => {
-      const t1Entry = test1Assessment?.scores?.[student.id];
-      const t2Entry = test2Assessment?.scores?.[student.id];
-      const exEntry = examAssessment?.scores?.[student.id];
+      const t1Entry = test1Assessment?.scores?.[student.id] || test1Assessment?.grades?.[student.id];
+      const t2Entry = test2Assessment?.scores?.[student.id] || test2Assessment?.grades?.[student.id];
+      const exEntry = examAssessment?.scores?.[student.id] || examAssessment?.grades?.[student.id];
 
       const calculation = calculateSubjectGrade(
         {
           rawScore: t1Entry?.score,
-          maxScore: test1Assessment?.maxScore || 20,
+          maxScore: 20,
           isAbsent: t1Entry?.isAbsent,
           note: t1Entry?.note,
           title: test1Assessment?.title,
         },
         {
           rawScore: t2Entry?.score,
-          maxScore: test2Assessment?.maxScore || 20,
+          maxScore: 20,
           isAbsent: t2Entry?.isAbsent,
           note: t2Entry?.note,
           title: test2Assessment?.title,
@@ -181,15 +181,17 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
         student,
         calculation,
         test1Score: t1Entry?.score ?? null,
-        test1Max: test1Assessment?.maxScore || 20,
+        test1Max: 20,
         test1Absent: t1Entry?.isAbsent,
         test2Score: t2Entry?.score ?? null,
-        test2Max: test2Assessment?.maxScore || 20,
+        test2Max: 20,
         test2Absent: t2Entry?.isAbsent,
         examScore: exEntry?.score ?? null,
         examMax: examAssessment?.maxScore || 20,
         examAbsent: exEntry?.isAbsent,
         average: calculation.averageOutOf20,
+        rawAverage: calculation.rawAverageOutOf20 ?? calculation.averageOutOf20,
+        weightedScore: calculation.weightedTotal,
         appraisal: calculation.appraisal,
       };
     });
@@ -939,10 +941,11 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
                   <table className="w-full text-right text-xs border-collapse">
                     <thead>
                       <tr className="bg-slate-100 text-slate-800 border-b border-slate-300 font-bold">
-                        <th className="p-2.5">الفرض الأول</th>
-                        <th className="p-2.5">الفرض الثاني</th>
-                        <th className="p-2.5">الاختبار</th>
-                        <th className="p-2.5 bg-emerald-50 text-emerald-900 font-black">معدل المادة / 20</th>
+                        <th className="p-2.5">الفرض الأول (/20)</th>
+                        <th className="p-2.5">الفرض الثاني (/20)</th>
+                        <th className="p-2.5">الاختبار (/20)</th>
+                        <th className="p-2.5 bg-blue-50 text-blue-900 font-black">معدل المادة (/20)</th>
+                        <th className="p-2.5 bg-emerald-50 text-emerald-950 font-black">النقطة بالمعامل</th>
                         <th className="p-2.5">الرتبة في القسم</th>
                         <th className="p-2.5">التقدير والملاحظة</th>
                       </tr>
@@ -970,10 +973,22 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
                             ? 'غائب'
                             : 'غير مدخل'}
                         </td>
-                        <td className="p-2.5 bg-emerald-50/70 font-black text-sm text-emerald-900">
+                        <td className="p-2.5 bg-blue-50/70 font-black text-sm text-blue-900">
                           {activeStudentGrade?.average !== null
                             ? `${activeStudentGrade?.average.toFixed(2)} / 20`
                             : '—'}
+                        </td>
+                        <td className="p-2.5 bg-emerald-50/70 font-black text-sm text-emerald-900 font-mono">
+                          {(() => {
+                            const coeff = (typeof activeStudentGrade?.calculation?.coefficient === 'number' && activeStudentGrade.calculation.coefficient > 0)
+                              ? activeStudentGrade.calculation.coefficient
+                              : (activeSubjectSetting?.coefficient || 1);
+                            const rawAvg = activeStudentGrade?.rawAverage ?? activeStudentGrade?.average;
+                            const weightedScore = activeStudentGrade?.weightedScore ?? (activeStudentGrade?.calculation?.weightedTotal !== null && activeStudentGrade?.calculation?.weightedTotal !== undefined
+                              ? activeStudentGrade.calculation.weightedTotal
+                              : (rawAvg !== null && rawAvg !== undefined ? Math.round(rawAvg * coeff * 100) / 100 : null));
+                            return weightedScore !== null ? weightedScore.toFixed(2) : '—';
+                          })()}
                         </td>
                         <td className="p-2.5 font-bold">
                           {activeStudentGrade?.rank ? `${activeStudentGrade.rank} من ${classStudents.length}` : '—'}
@@ -1012,48 +1027,62 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
                     <th className="p-2 text-center w-10">#</th>
                     <th className="p-2 text-center w-20">رقم التسجيل</th>
                     <th className="p-2">اللقب والاسم</th>
-                    <th className="p-2 text-center">الفرض 1</th>
-                    <th className="p-2 text-center">الفرض 2</th>
-                    <th className="p-2 text-center">الاختبار</th>
-                    <th className="p-2 text-center bg-emerald-50 text-emerald-950 font-black">المعدل / 20</th>
+                    <th className="p-2 text-center">الفرض الأول (/20)</th>
+                    <th className="p-2 text-center">الفرض الثاني (/20)</th>
+                    <th className="p-2 text-center">الاختبار (/20)</th>
+                    <th className="p-2 text-center bg-blue-50 text-blue-950 font-black">معدل المادة (/20)</th>
+                    <th className="p-2 text-center bg-emerald-50 text-emerald-950 font-black">النقطة بالمعامل</th>
                     <th className="p-2 text-center">الرتبة</th>
                     <th className="p-2">التقدير الرسمي</th>
                     <th className="p-2">الملاحظة</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-200">
-                  {computedClassGrades.map((item, idx) => (
-                    <tr key={item.student.id} className="hover:bg-slate-50">
-                      <td className="p-2 text-center font-bold text-slate-500">{idx + 1}</td>
-                      <td className="p-2 text-center font-mono text-[11px] text-slate-600">
-                        {item.student.studentNumber || '—'}
-                      </td>
-                      <td className="p-2 font-bold text-slate-900">
-                        {item.student.lastName} {item.student.firstName}
-                      </td>
-                      <td className="p-2 text-center font-medium">
-                        {item.test1Score !== null ? item.test1Score : item.test1Absent ? 'غائب' : '—'}
-                      </td>
-                      <td className="p-2 text-center font-medium">
-                        {item.test2Score !== null ? item.test2Score : item.test2Absent ? 'غائب' : '—'}
-                      </td>
-                      <td className="p-2 text-center font-medium">
-                        {item.examScore !== null ? item.examScore : item.examAbsent ? 'غائب' : '—'}
-                      </td>
-                      <td className="p-2 text-center bg-emerald-50/60 font-black text-emerald-950">
-                        {item.average !== null ? item.average.toFixed(2) : '—'}
-                      </td>
-                      <td className="p-2 text-center font-bold text-slate-700">
-                        {item.rank ? item.rank : '—'}
-                      </td>
-                      <td className="p-2 font-semibold text-slate-800">
-                        {item.appraisal?.label || '—'}
-                      </td>
-                      <td className="p-2 text-slate-600 text-[11px] truncate max-w-[120px]">
-                        {item.student.notes || '—'}
-                      </td>
-                    </tr>
-                  ))}
+                  {computedClassGrades.map((item, idx) => {
+                    const coeff = (typeof item.calculation?.coefficient === 'number' && item.calculation.coefficient > 0)
+                      ? item.calculation.coefficient
+                      : (activeSubjectSetting?.coefficient || 1);
+                    const rawAvg = item.rawAverage ?? item.calculation?.rawAverageOutOf20 ?? item.average;
+                    const weightedScore = item.weightedScore ?? (item.calculation?.weightedTotal !== null && item.calculation?.weightedTotal !== undefined
+                      ? item.calculation.weightedTotal
+                      : (rawAvg !== null ? Math.round(rawAvg * coeff * 100) / 100 : null));
+
+                    return (
+                      <tr key={item.student.id} className="hover:bg-slate-50">
+                        <td className="p-2 text-center font-bold text-slate-500">{idx + 1}</td>
+                        <td className="p-2 text-center font-mono text-[11px] text-slate-600">
+                          {item.student.studentNumber || '—'}
+                        </td>
+                        <td className="p-2 font-bold text-slate-900">
+                          {item.student.lastName} {item.student.firstName}
+                        </td>
+                        <td className="p-2 text-center font-medium">
+                          {item.test1Score !== null ? item.test1Score : item.test1Absent ? 'غائب' : '—'}
+                        </td>
+                        <td className="p-2 text-center font-medium">
+                          {item.test2Score !== null ? item.test2Score : item.test2Absent ? 'غائب' : '—'}
+                        </td>
+                        <td className="p-2 text-center font-medium">
+                          {item.examScore !== null ? item.examScore : item.examAbsent ? 'غائب' : '—'}
+                        </td>
+                        <td className="p-2 text-center bg-blue-50/60 font-black text-blue-950 font-mono">
+                          {item.average !== null ? item.average.toFixed(2) : '—'}
+                        </td>
+                        <td className="p-2 text-center bg-emerald-50/60 font-black text-emerald-950 font-mono">
+                          {weightedScore !== null ? weightedScore.toFixed(2) : '—'}
+                        </td>
+                        <td className="p-2 text-center font-bold text-slate-700">
+                          {item.rank ? item.rank : '—'}
+                        </td>
+                        <td className="p-2 font-semibold text-slate-800">
+                          {item.appraisal?.label || '—'}
+                        </td>
+                        <td className="p-2 text-slate-600 text-[11px] truncate max-w-[120px]">
+                          {item.student.notes || '—'}
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>

@@ -127,10 +127,11 @@ export const SubjectSettingsSection: React.FC<SubjectSettingsSectionProps> = ({
                         {methodInfo.title}
                       </span>
                     </div>
-                    <div className="font-mono text-xs font-black text-slate-800 dark:text-slate-200 dir-ltr bg-white dark:bg-slate-900 px-2 py-1 rounded border border-slate-200/60 dark:border-slate-700/60 text-center">
-                      {sub.calculationMethod?.method === 'custom_weights'
-                        ? `(فرض1×${sub.calculationMethod.customTest1Weight ?? 1} + فرض2×${sub.calculationMethod.customTest2Weight ?? 1} + اختبار×${sub.calculationMethod.customExamWeight ?? 2}) ÷ الأوزان`
-                        : methodInfo.formula}
+                    <div className="font-mono text-xs font-black text-slate-800 dark:text-slate-200 dir-ltr bg-white dark:bg-slate-900 px-2.5 py-1.5 rounded-lg border border-slate-200/80 dark:border-slate-700/80 text-center text-emerald-700 dark:text-emerald-400 shadow-2xs">
+                      {sub.calculationMethod?.customFormulaString ||
+                        (sub.calculationMethod?.method === 'custom_weights'
+                          ? `(فرض1×${sub.calculationMethod.customTest1Weight ?? 1} + فرض2×${sub.calculationMethod.customTest2Weight ?? 1} + اختبار×${sub.calculationMethod.customExamWeight ?? 2}) ÷ الأوزان`
+                          : methodInfo.formula)}
                     </div>
                     <p className="text-[10px] text-slate-500 dark:text-slate-400">
                       {methodInfo.description}

@@ -107,7 +107,14 @@ export interface AssessmentItem {
 }
 
 // كيفية الحساب للمادة (Subject Calculation Methods)
+export interface FormulaToken {
+  type: 'component' | 'operator' | 'parenthesis' | 'number';
+  value: string;
+  label: string;
+}
+
 export type SubjectCalculationMethodType =
+  | 'custom_formula'                 // معادلة مخصصة يبنيها الأستاذ بالآلة الحاسبة
   | 'tests_avg_plus_exam_x2_div_3'    // ((فرض 1 + فرض 2) / 2 + اختبار × 2) / 3 (الرسمي الشائع)
   | 'tests_sum_plus_exam_x2_div_4'    // (فرض 1 + فرض 2 + اختبار × 2) / 4 (الوزاري المباشر)
   | 'best_test_plus_exam_x2_div_3'    // (الأعلى بين فرض 1 وفرض 2 + اختبار × 2) / 3 (أفضل فرض)
@@ -117,6 +124,8 @@ export type SubjectCalculationMethodType =
 
 export interface SubjectCalculationConfig {
   method: SubjectCalculationMethodType;
+  customFormulaTokens?: FormulaToken[]; // الرموز التعبيرية للمعادلة المبنية
+  customFormulaString?: string;        // نص المعادلة المعروض
   customTest1Weight?: number;  // وزن فرض 1 (افتراضياً 1)
   customTest2Weight?: number;  // وزن فرض 2 (افتراضياً 1)
   customExamWeight?: number;   // وزن الاختبار (افتراضياً 2)

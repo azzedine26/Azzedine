@@ -282,12 +282,19 @@ export async function exportGradesSheetDocx(
   // Filter assessments for this class and trimester
   const classAssessments = assessments
     .filter((a) => a.classId === classItem.id && (trimester === 'ALL' || a.trimester === trimester))
-    .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+    .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
+    .map((a) => {
+      const isT1 = a.type === 'test1' || (a.title && (a.title.includes('الفرض الأول') || a.title.includes('فرض 1')));
+      const isT2 = a.type === 'test2' || (a.title && (a.title.includes('الفرض الثاني') || a.title.includes('فرض 2')));
+      if (isT1) return { ...a, type: 'test1' as const, title: 'الفرض الأول', maxScore: 20 };
+      if (isT2) return { ...a, type: 'test2' as const, title: 'الفرض الثاني', maxScore: 20 };
+      return a;
+    });
 
   // Find standard Algerian test1, test2, and exam if present
-  const test1Assessment = classAssessments.find((a) => a.type === 'test1');
-  const test2Assessment = classAssessments.find((a) => a.type === 'test2');
-  const examAssessment = classAssessments.find((a) => a.type === 'exam');
+  const test1Assessment = classAssessments.find((a) => a.type === 'test1' || (a.title && (a.title.includes('الفرض الأول') || a.title.includes('فرض 1'))));
+  const test2Assessment = classAssessments.find((a) => a.type === 'test2' || (a.title && (a.title.includes('الفرض الثاني') || a.title.includes('فرض 2'))));
+  const examAssessment = classAssessments.find((a) => a.type === 'exam' || (a.title && a.title.includes('اختبار')));
 
   // Table headers
   const headerCells: TableCell[] = [
@@ -327,14 +334,20 @@ export async function exportGradesSheetDocx(
   headerCells.push(
     new TableCell({
       borders: commonBorders,
+      shading: { fill: 'F1F5F9' },
+      width: { size: 10, type: WidthType.PERCENTAGE },
+      children: [createP('معدل المادة (/20)', { bold: true, alignment: AlignmentType.CENTER })],
+    }),
+    new TableCell({
+      borders: commonBorders,
       shading: { fill: 'E2E8F0' }, // slate-200
-      width: { size: 12, type: WidthType.PERCENTAGE },
-      children: [createP('المعدل / 20', { bold: true, alignment: AlignmentType.CENTER })],
+      width: { size: 10, type: WidthType.PERCENTAGE },
+      children: [createP('النقطة بالمعامل', { bold: true, alignment: AlignmentType.CENTER })],
     }),
     new TableCell({
       borders: commonBorders,
       shading: headerShading,
-      width: { size: 16, type: WidthType.PERCENTAGE },
+      width: { size: 14, type: WidthType.PERCENTAGE },
       children: [createP('التقدير البيداغوجي', { bold: true, alignment: AlignmentType.CENTER })],
     })
   );
@@ -363,14 +376,14 @@ export async function exportGradesSheetDocx(
     const calculation = calculateSubjectGrade(
       {
         rawScore: t1Entry?.score,
-        maxScore: test1Assessment?.maxScore || 20,
+        maxScore: 20,
         isAbsent: t1Entry?.isAbsent,
         note: t1Entry?.note,
         title: test1Assessment?.title,
       },
       {
         rawScore: t2Entry?.score,
-        maxScore: test2Assessment?.maxScore || 20,
+        maxScore: 20,
         isAbsent: t2Entry?.isAbsent,
         note: t2Entry?.note,
         title: test2Assessment?.title,
@@ -427,13 +440,35 @@ export async function exportGradesSheetDocx(
       );
     });
 
-    // Average cell
+    // Subject Average (/20) cell
     rowCells.push(
       new TableCell({
         borders: commonBorders,
-        shading: avg !== null && avg >= 10 ? { fill: 'ECFDF5' } : avg !== null ? { fill: 'FFF1F2' } : undefined,
+        shading: avg !== null && avg >= 10 ? { fill: 'EFF6FF' } : avg !== null ? { fill: 'FFF1F2' } : undefined,
         children: [
           createP(avg !== null ? avg.toFixed(2) : '-', {
+            bold: true,
+            alignment: AlignmentType.CENTER,
+          }),
+        ],
+      })
+    );
+
+    // Point with coefficient cell (النقطة بالمعامل)
+    const coeff = (typeof calculation.coefficient === 'number' && calculation.coefficient > 0)
+      ? calculation.coefficient
+      : (subjectSetting?.coefficient || 1);
+    const rawAvg = calculation.rawAverageOutOf20 ?? avg;
+    const weightedScore = calculation.weightedTotal !== null && calculation.weightedTotal !== undefined
+      ? calculation.weightedTotal
+      : (rawAvg !== null ? Math.round(rawAvg * coeff * 100) / 100 : null);
+
+    rowCells.push(
+      new TableCell({
+        borders: commonBorders,
+        shading: weightedScore !== null && weightedScore >= 10 * coeff ? { fill: 'ECFDF5' } : weightedScore !== null ? { fill: 'FFF1F2' } : undefined,
+        children: [
+          createP(weightedScore !== null ? weightedScore.toFixed(2) : '-', {
             bold: true,
             alignment: AlignmentType.CENTER,
           }),
@@ -600,14 +635,14 @@ export async function exportStudentReportCardDocx(
   const calculation = calculateSubjectGrade(
     {
       rawScore: t1Entry?.score,
-      maxScore: test1Assessment?.maxScore || 20,
+      maxScore: 20,
       isAbsent: t1Entry?.isAbsent,
       note: t1Entry?.note,
       title: test1Assessment?.title,
     },
     {
       rawScore: t2Entry?.score,
-      maxScore: test2Assessment?.maxScore || 20,
+      maxScore: 20,
       isAbsent: t2Entry?.isAbsent,
       note: t2Entry?.note,
       title: test2Assessment?.title,
@@ -687,23 +722,57 @@ export async function exportStudentReportCardDocx(
     );
   });
 
-  // Final average row
+  // Final average and weighted point rows
   assessmentRows.push(
     new TableRow({
       children: [
         new TableCell({
           borders: commonBorders,
-          shading: { fill: 'E2E8F0' },
-          children: [createP('معدل المادة الفصلي النهائي', { bold: true, alignment: AlignmentType.RIGHT })],
+          shading: { fill: 'F1F5F9' },
+          children: [createP('معدل المادة الفصلي (/20)', { bold: true, alignment: AlignmentType.RIGHT })],
         }),
         new TableCell({
           borders: commonBorders,
-          shading: { fill: 'E2E8F0' },
+          shading: { fill: 'F1F5F9' },
           children: [
             createP(avg !== null ? `${avg.toFixed(2)} / 20` : 'غير محسوب', {
               bold: true,
               alignment: AlignmentType.CENTER,
             }),
+          ],
+        }),
+        new TableCell({
+          borders: commonBorders,
+          shading: { fill: 'F1F5F9' },
+          children: [createP(`معامل: ${subjectSetting?.coefficient || 1}`, { bold: true, alignment: AlignmentType.CENTER })],
+        }),
+        new TableCell({
+          borders: commonBorders,
+          shading: { fill: 'F1F5F9' },
+          children: [createP(appraisal?.label || '-', { bold: true, alignment: AlignmentType.RIGHT })],
+        }),
+      ],
+    }),
+    new TableRow({
+      children: [
+        new TableCell({
+          borders: commonBorders,
+          shading: { fill: 'E2E8F0' },
+          children: [createP('النقطة بالمعامل (المعدل × المعامل)', { bold: true, alignment: AlignmentType.RIGHT })],
+        }),
+        new TableCell({
+          borders: commonBorders,
+          shading: { fill: 'E2E8F0' },
+          children: [
+            createP(
+              calculation.weightedTotal !== null && calculation.weightedTotal !== undefined
+                ? `${calculation.weightedTotal.toFixed(2)}`
+                : (avg !== null ? `${(avg * (subjectSetting?.coefficient || 1)).toFixed(2)}` : 'غير محسوب'),
+              {
+                bold: true,
+                alignment: AlignmentType.CENTER,
+              }
+            ),
           ],
         }),
         new TableCell({

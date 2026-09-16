@@ -466,6 +466,28 @@ export const databaseService = {
   },
 
   // ================= ASSESSMENTS & GRADES (النقاط والمعدلات) =================
+  sanitizeAssessmentMaxScore(item: AssessmentItem): AssessmentItem {
+    const isTest1 = item.type === 'test1' || (item.title && (item.title.includes('الفرض الأول') || item.title.includes('فرض 1')));
+    const isTest2 = item.type === 'test2' || (item.title && (item.title.includes('الفرض الثاني') || item.title.includes('فرض 2')));
+    if (isTest1) {
+      return {
+        ...item,
+        type: 'test1',
+        title: item.title && !item.title.includes('الفرض الأول') ? 'الفرض الأول' : item.title,
+        maxScore: 20,
+      };
+    }
+    if (isTest2) {
+      return {
+        ...item,
+        type: 'test2',
+        title: item.title && !item.title.includes('الفرض الثاني') ? 'الفرض الثاني' : item.title,
+        maxScore: 20,
+      };
+    }
+    return item;
+  },
+
   async getAllAssessments(): Promise<AssessmentItem[]> {
     return withStore<AssessmentItem[]>(STORES.ASSESSMENTS, 'readonly', (store) => {
       return new Promise((resolve, reject) => {
@@ -473,7 +495,7 @@ export const databaseService = {
         req.onsuccess = () => {
           const list = (req.result as AssessmentItem[]) || [];
           list.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-          resolve(list);
+          resolve(list.map((item) => this.sanitizeAssessmentMaxScore(item)));
         };
         req.onerror = () => reject(req.error);
       });
@@ -488,7 +510,7 @@ export const databaseService = {
         req.onsuccess = () => {
           const list = (req.result as AssessmentItem[]) || [];
           list.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-          resolve(list);
+          resolve(list.map((item) => this.sanitizeAssessmentMaxScore(item)));
         };
         req.onerror = () => reject(req.error);
       });
@@ -499,7 +521,7 @@ export const databaseService = {
     return withStore<AssessmentItem | null>(STORES.ASSESSMENTS, 'readonly', (store) => {
       return new Promise((resolve, reject) => {
         const req = store.get(id);
-        req.onsuccess = () => resolve(req.result || null);
+        req.onsuccess = () => resolve(req.result ? this.sanitizeAssessmentMaxScore(req.result) : null);
         req.onerror = () => reject(req.error);
       });
     });
@@ -516,10 +538,11 @@ export const databaseService = {
   },
 
   async addAssessment(assessment: AssessmentItem): Promise<AssessmentItem> {
+    const sanitized = this.sanitizeAssessmentMaxScore(assessment);
     const itemWithTimestamps: AssessmentItem = {
-      ...assessment,
-      grades: assessment.grades || {},
-      createdAt: assessment.createdAt || Date.now(),
+      ...sanitized,
+      grades: sanitized.grades || {},
+      createdAt: sanitized.createdAt || Date.now(),
       updatedAt: Date.now(),
     };
 
@@ -533,9 +556,10 @@ export const databaseService = {
   },
 
   async updateAssessment(assessment: AssessmentItem): Promise<AssessmentItem> {
+    const sanitized = this.sanitizeAssessmentMaxScore(assessment);
     const updated: AssessmentItem = {
-      ...assessment,
-      grades: assessment.grades || {},
+      ...sanitized,
+      grades: sanitized.grades || {},
       updatedAt: Date.now(),
     };
 
@@ -554,11 +578,11 @@ export const databaseService = {
       throw new Error('التقييم المطلوب غير موجود.');
     }
 
-    const updated: AssessmentItem = {
+    const updated: AssessmentItem = this.sanitizeAssessmentMaxScore({
       ...existing,
       grades: grades || {},
       updatedAt: Date.now(),
-    };
+    });
 
     return withStore<AssessmentItem>(STORES.ASSESSMENTS, 'readwrite', (store) => {
       return new Promise((resolve, reject) => {
@@ -636,13 +660,14 @@ export const databaseService = {
                   : 'اختبار الفصل';
 
               if (!foundKey) {
-                const normItem: AssessmentItem = {
+                const normItem: AssessmentItem = this.sanitizeAssessmentMaxScore({
                   ...item,
                   type: cat as any,
                   title: catTitle,
                   coefficient: 1,
+                  maxScore: (cat === 'test1' || cat === 'test2') ? 20 : (item.maxScore || 20),
                   grades: { ...(item.grades || {}) },
-                };
+                });
                 const key = `${item.classId}_${itemSubj}_${item.trimester}_${cat}`;
                 map.set(key, normItem);
               } else {
@@ -655,13 +680,14 @@ export const databaseService = {
                   if (existing.id !== item.id) {
                     toDeleteIds.add(existing.id);
                   }
-                  const normItem: AssessmentItem = {
+                  const normItem: AssessmentItem = this.sanitizeAssessmentMaxScore({
                     ...item,
                     type: cat as any,
                     title: catTitle,
                     coefficient: 1,
+                    maxScore: (cat === 'test1' || cat === 'test2') ? 20 : (item.maxScore || 20),
                     grades: mergedGrades,
-                  };
+                  });
                   map.set(foundKey, normItem);
                 } else {
                   if (item.id !== existing.id) {
@@ -670,6 +696,9 @@ export const databaseService = {
                   existing.grades = mergedGrades;
                   existing.type = cat as any;
                   existing.title = catTitle;
+                  if (cat === 'test1' || cat === 'test2') {
+                    existing.maxScore = 20;
+                  }
                 }
               }
             } else {

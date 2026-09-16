@@ -1,4 +1,5 @@
 import { AssessmentItem, AssessmentType, CalculationFormula, StudentItem, Trimester, SubjectSetting } from '../types';
+import { evaluateFormulaTokens, formatFormulaTokens, DEFAULT_FORMULA_TOKENS, DEFAULT_FORMULA_STRING } from './formulaParser';
 
 /**
  * Normalizes any score to base 20 (Algerian standard scale)
@@ -172,12 +173,14 @@ export interface AssessmentGradeDetail {
 
 export interface SubjectCalculationDetailResult {
   averageOutOf20: number | null; // معدل المادة (من 20)
+  rawAverageOutOf20?: number | null; // القيمة الأصلية الدقيقة لمعدل المادة قبل التقريب
   coefficient: number | null; // معامل المادة (المعامل الوحيد للمادة)
-  weightedTotal: number | null; // معدل المادة × معامل المادة
-  appraisal: AlgerianAppraisal | null;
+  weightedTotal: number | null; // النقطة بالمعامل = معدل المادة × معامل المادة (محسوبة بالقيمة الأصلية الدقيقة)
+  appraisal: AlgerianAppraisal | null; // التقدير يتم تحديده اعتماداً على معدل المادة (/20) فقط
   methodName: string;
   methodFormula: string;
   calculationSteps: string[];
+  continuous?: AssessmentGradeDetail;
   test1: AssessmentGradeDetail;
   test2: AssessmentGradeDetail;
   exam: AssessmentGradeDetail;
@@ -185,20 +188,19 @@ export interface SubjectCalculationDetailResult {
 }
 
 /**
- * دالة حساب معدل المادة وفق "كيفية الحساب" المحددة في إعدادات المادة.
+ * دالة حساب معدل المادة وفق "كيفية الحساب" أو "المعادلة المخصصة" المحددة في إعدادات المادة.
  * تأخذ بعين الاعتبار:
- * - المعامل واحد فقط للمادة
- * - فرض 1 وفرض 2 فقط
- * - اختبار واحد فقط
- * - لا يوجد فرض 3
- * - لا توجد معاملات للتقييمات
+ * - المعامل واحد فقط للمادة (ويمكن استخدامه داخل المعادلة كمتغير ديناميكي)
+ * - التقويم، فرض 1، فرض 2، والاختبار
  * - العلامة المتحصل عليها والعدد الأقصى لكل تقييم
+ * - دعم بناء وتطبيق المعادلات المخصصة عبر Parser آمن
  */
 export function calculateSubjectGrade(
   test1: { rawScore?: number | null; maxScore?: number; isAbsent?: boolean; note?: string; title?: string },
   test2: { rawScore?: number | null; maxScore?: number; isAbsent?: boolean; note?: string; title?: string },
   exam: { rawScore?: number | null; maxScore?: number; isAbsent?: boolean; note?: string; title?: string },
-  subjectSetting?: SubjectSetting | null
+  subjectSetting?: SubjectSetting | null,
+  continuous?: { rawScore?: number | null; maxScore?: number; isAbsent?: boolean; note?: string; title?: string }
 ): SubjectCalculationDetailResult {
   const hasValidCoeff = typeof subjectSetting?.coefficient === 'number' && !isNaN(subjectSetting.coefficient) && subjectSetting.coefficient > 0;
   const coeff: number | null = hasValidCoeff ? (subjectSetting!.coefficient as number) : null;
@@ -210,19 +212,25 @@ export function calculateSubjectGrade(
     description: '((فرض 1 + فرض 2) ÷ 2 + الاختبار × 2) ÷ 3',
   };
 
-  const t1Max = test1.maxScore && test1.maxScore > 0 ? test1.maxScore : 20;
-  const t2Max = test2.maxScore && test2.maxScore > 0 ? test2.maxScore : 20;
+  const contMax = continuous?.maxScore && continuous.maxScore > 0 ? continuous.maxScore : 20;
+  // الفرض الأول والفرض الثاني دائماً رسمياً من 20 في المنظومة الجزائرية
+  const t1Max = 20;
+  const t2Max = 20;
   const exMax = exam.maxScore && exam.maxScore > 0 ? exam.maxScore : 20;
 
+  const contRaw = continuous && typeof continuous.rawScore === 'number' && !isNaN(continuous.rawScore) && !continuous.isAbsent ? continuous.rawScore : null;
   const t1Raw = typeof test1.rawScore === 'number' && !isNaN(test1.rawScore) && !test1.isAbsent ? test1.rawScore : null;
   const t2Raw = typeof test2.rawScore === 'number' && !isNaN(test2.rawScore) && !test2.isAbsent ? test2.rawScore : null;
   const exRaw = typeof exam.rawScore === 'number' && !isNaN(exam.rawScore) && !exam.isAbsent ? exam.rawScore : null;
 
-  const t1Norm = t1Raw !== null ? normalizeTo20(t1Raw, t1Max) : null;
-  const t2Norm = t2Raw !== null ? normalizeTo20(t2Raw, t2Max) : null;
+  const contNorm = contRaw !== null ? normalizeTo20(contRaw, contMax) : null;
+  // العلامة المدخلة من 20 مباشرة (مثلاً 12 تعني 12/20 وليس 12/40، ولا تُقسم أو تُضاعف)
+  const t1Norm = t1Raw !== null ? Math.round(t1Raw * 100) / 100 : null;
+  const t2Norm = t2Raw !== null ? Math.round(t2Raw * 100) / 100 : null;
   const exNorm = exRaw !== null ? normalizeTo20(exRaw, exMax) : null;
 
   let completedCount = 0;
+  if (contNorm !== null) completedCount++;
   if (t1Norm !== null) completedCount++;
   if (t2Norm !== null) completedCount++;
   if (exNorm !== null) completedCount++;
@@ -232,22 +240,30 @@ export function calculateSubjectGrade(
   let methodName = 'معدل الفرضين + الاختبار مضاعف ÷ 3';
   let methodFormula = '((فرض 1 + فرض 2) ÷ 2 + الاختبار × 2) ÷ 3';
 
-  // خطوة 1: عرض العلامات المتحصل عليها والعدد الأقصى
+  // عرض العلامات المتحصل عليها
   const scoresDisplayParts: string[] = [];
-  if (t1Raw !== null) {
-    scoresDisplayParts.push(`فرض 1: ${t1Raw}/${t1Max}${t1Max !== 20 ? ` (المسواة: ${t1Norm}/20)` : ''}`);
-  } else if (test1.isAbsent) {
-    scoresDisplayParts.push('فرض 1: غائب');
+  if (contRaw !== null) {
+    scoresDisplayParts.push(`التقويم: ${contRaw}/${contMax}${contMax !== 20 ? ` (المسواة: ${contNorm}/20)` : ''}`);
+  } else if (continuous?.isAbsent) {
+    scoresDisplayParts.push('التقويم: غائب');
   } else {
-    scoresDisplayParts.push('فرض 1: غير مدخل');
+    scoresDisplayParts.push('التقويم: غير مدخل');
+  }
+
+  if (t1Raw !== null) {
+    scoresDisplayParts.push(`الفرض الأول: ${t1Raw}/20`);
+  } else if (test1.isAbsent) {
+    scoresDisplayParts.push('الفرض الأول: غائب');
+  } else {
+    scoresDisplayParts.push('الفرض الأول: غير مدخل');
   }
 
   if (t2Raw !== null) {
-    scoresDisplayParts.push(`فرض 2: ${t2Raw}/${t2Max}${t2Max !== 20 ? ` (المسواة: ${t2Norm}/20)` : ''}`);
+    scoresDisplayParts.push(`الفرض الثاني: ${t2Raw}/20`);
   } else if (test2.isAbsent) {
-    scoresDisplayParts.push('فرض 2: غائب');
+    scoresDisplayParts.push('الفرض الثاني: غائب');
   } else {
-    scoresDisplayParts.push('فرض 2: غير مدخل');
+    scoresDisplayParts.push('الفرض الثاني: غير مدخل');
   }
 
   if (exRaw !== null) {
@@ -270,195 +286,65 @@ export function calculateSubjectGrade(
       methodName,
       methodFormula,
       calculationSteps: steps,
-      test1: { rawScore: t1Raw, maxScore: t1Max, normalizedScore: t1Norm, isAbsent: test1.isAbsent, note: test1.note, assessmentTitle: test1.title },
-      test2: { rawScore: t2Raw, maxScore: t2Max, normalizedScore: t2Norm, isAbsent: test2.isAbsent, note: test2.note, assessmentTitle: test2.title },
+      continuous: { rawScore: contRaw, maxScore: contMax, normalizedScore: contNorm, isAbsent: continuous?.isAbsent, note: continuous?.note, assessmentTitle: continuous?.title },
+      test1: { rawScore: t1Raw, maxScore: 20, normalizedScore: t1Norm, isAbsent: test1.isAbsent, note: test1.note, assessmentTitle: test1.title },
+      test2: { rawScore: t2Raw, maxScore: 20, normalizedScore: t2Norm, isAbsent: test2.isAbsent, note: test2.note, assessmentTitle: test2.title },
       exam: { rawScore: exRaw, maxScore: exMax, normalizedScore: exNorm, isAbsent: exam.isAbsent, note: exam.note, assessmentTitle: exam.title },
       completedCount,
     };
   }
 
-  switch (config.method) {
-    case 'tests_avg_plus_exam_x2_div_3': {
-      methodName = 'معدل الفرضين + الاختبار مضاعف ÷ 3';
-      methodFormula = '((فرض 1 + فرض 2) ÷ 2 + الاختبار × 2) ÷ 3';
+  // Always evaluate the manual custom formula defined by the teacher (or default formula)
+  const tokens = (config.customFormulaTokens && config.customFormulaTokens.length > 0)
+    ? config.customFormulaTokens
+    : DEFAULT_FORMULA_TOKENS;
 
-      let testsAvg: number | null = null;
-      if (t1Norm !== null && t2Norm !== null) {
-        testsAvg = (t1Norm + t2Norm) / 2;
-        steps.push(`متوسط الفرضين: (${t1Norm} + ${t2Norm}) ÷ 2 = ${testsAvg.toFixed(2)} / 20`);
-      } else if (t1Norm !== null) {
-        testsAvg = t1Norm;
-        steps.push(`اعتماد نقطة الفرض الأول: ${t1Norm.toFixed(2)} / 20`);
-      } else if (t2Norm !== null) {
-        testsAvg = t2Norm;
-        steps.push(`اعتماد نقطة الفرض الثاني: ${t2Norm.toFixed(2)} / 20`);
-      }
+  methodName = 'المعادلة اليدوية للمادة';
+  methodFormula = config.customFormulaString || formatFormulaTokens(tokens) || DEFAULT_FORMULA_STRING;
 
-      if (testsAvg !== null && exNorm !== null) {
-        calculatedAvg = (testsAvg + exNorm * 2) / 3;
-        steps.push(`تطبيق طريقة الحساب: (${testsAvg.toFixed(2)} + ${exNorm} × 2) ÷ 3 = (${testsAvg.toFixed(2)} + ${(exNorm * 2).toFixed(2)}) ÷ 3 = ${calculatedAvg.toFixed(2)} / 20`);
-      } else if (testsAvg !== null) {
-        calculatedAvg = testsAvg;
-        steps.push(`غياب الاختبار: احتساب متوسط الفروض فقط = ${calculatedAvg.toFixed(2)} / 20`);
-      } else if (exNorm !== null) {
-        calculatedAvg = exNorm;
-        steps.push(`غياب الفروض: احتساب علامة الاختبار = ${calculatedAvg.toFixed(2)} / 20`);
-      }
-      break;
-    }
+  const evalResult = evaluateFormulaTokens(tokens, {
+    continuous: contNorm,
+    test1: t1Norm,
+    test2: t2Norm,
+    exam: exNorm,
+    coefficient: coeff,
+  });
 
-    case 'tests_sum_plus_exam_x2_div_4': {
-      methodName = 'مجموع الفرضين + الاختبار مضاعف ÷ 4';
-      methodFormula = '(فرض 1 + فرض 2 + الاختبار × 2) ÷ 4';
-
-      if (t1Norm !== null && t2Norm !== null && exNorm !== null) {
-        calculatedAvg = (t1Norm + t2Norm + exNorm * 2) / 4;
-        steps.push(`تطبيق طريقة الحساب: (${t1Norm} + ${t2Norm} + ${exNorm} × 2) ÷ 4 = ${(t1Norm + t2Norm + exNorm * 2).toFixed(2)} ÷ 4 = ${calculatedAvg.toFixed(2)} / 20`);
-      } else if ((t1Norm !== null || t2Norm !== null) && exNorm !== null) {
-        const t = t1Norm !== null ? t1Norm : t2Norm!;
-        calculatedAvg = (t + exNorm * 2) / 3;
-        steps.push(`حساب بفرض واحد واختبار مضاعف: (${t} + ${exNorm} × 2) ÷ 3 = ${calculatedAvg.toFixed(2)} / 20`);
-      } else if (t1Norm !== null && t2Norm !== null) {
-        calculatedAvg = (t1Norm + t2Norm) / 2;
-        steps.push(`حساب بفرضي المراقبة فقط: (${t1Norm} + ${t2Norm}) ÷ 2 = ${calculatedAvg.toFixed(2)} / 20`);
-      } else if (exNorm !== null) {
-        calculatedAvg = exNorm;
-        steps.push(`حساب بعلامة الاختبار فقط: ${exNorm.toFixed(2)} / 20`);
-      } else {
-        calculatedAvg = t1Norm !== null ? t1Norm : t2Norm;
-      }
-      break;
-    }
-
-    case 'best_test_plus_exam_x2_div_3': {
-      methodName = 'أفضل فرض + الاختبار مضاعف ÷ 3';
-      methodFormula = '(الأعلى بين [فرض 1، فرض 2] + الاختبار × 2) ÷ 3';
-
-      let bestTest: number | null = null;
-      if (t1Norm !== null && t2Norm !== null) {
-        bestTest = Math.max(t1Norm, t2Norm);
-        steps.push(`اختيار الفرض الأفضل: الأعلى بين (${t1Norm}، ${t2Norm}) = ${bestTest} / 20`);
-      } else if (t1Norm !== null) {
-        bestTest = t1Norm;
-        steps.push(`اعتماد الفرض المتاح: ${bestTest} / 20`);
-      } else if (t2Norm !== null) {
-        bestTest = t2Norm;
-        steps.push(`اعتماد الفرض المتاح: ${bestTest} / 20`);
-      }
-
-      if (bestTest !== null && exNorm !== null) {
-        calculatedAvg = (bestTest + exNorm * 2) / 3;
-        steps.push(`تطبيق طريقة الحساب: (${bestTest} + ${exNorm} × 2) ÷ 3 = (${bestTest} + ${(exNorm * 2).toFixed(2)}) ÷ 3 = ${calculatedAvg.toFixed(2)} / 20`);
-      } else if (bestTest !== null) {
-        calculatedAvg = bestTest;
-      } else if (exNorm !== null) {
-        calculatedAvg = exNorm;
-      }
-      break;
-    }
-
-    case 'test1_only_plus_exam_x2_div_3': {
-      methodName = 'فرض 1 فقط + الاختبار مضاعف ÷ 3';
-      methodFormula = '(فرض 1 + الاختبار × 2) ÷ 3';
-
-      const t1 = t1Norm !== null ? t1Norm : t2Norm; // fallback to test 2 if test 1 empty
-      if (t1 !== null && exNorm !== null) {
-        calculatedAvg = (t1 + exNorm * 2) / 3;
-        steps.push(`تطبيق طريقة الحساب: (${t1} + ${exNorm} × 2) ÷ 3 = ${calculatedAvg.toFixed(2)} / 20`);
-      } else if (t1 !== null) {
-        calculatedAvg = t1;
-        steps.push(`اعتماد علامة الفرض: ${t1.toFixed(2)} / 20`);
-      } else if (exNorm !== null) {
-        calculatedAvg = exNorm;
-        steps.push(`اعتماد علامة الاختبار: ${exNorm.toFixed(2)} / 20`);
-      }
-      break;
-    }
-
-    case 'arithmetic_mean': {
-      methodName = 'المتوسط الحسابي البسيط';
-      methodFormula = '(فرض 1 + فرض 2 + الاختبار) ÷ 3';
-
-      const validList: number[] = [];
-      if (t1Norm !== null) validList.push(t1Norm);
-      if (t2Norm !== null) validList.push(t2Norm);
-      if (exNorm !== null) validList.push(exNorm);
-
-      const sum = validList.reduce((acc, v) => acc + v, 0);
-      calculatedAvg = validList.length > 0 ? sum / validList.length : null;
-      steps.push(`المتوسط الحسابي: (${validList.join(' + ')}) ÷ ${validList.length} = ${calculatedAvg?.toFixed(2)} / 20`);
-      break;
-    }
-
-    case 'custom_weights': {
-      const w1 = config.customTest1Weight ?? 1;
-      const w2 = config.customTest2Weight ?? 1;
-      const w3 = config.customExamWeight ?? 2;
-      methodName = 'أوزان مخصصة يحددها الأستاذ';
-      methodFormula = `(فرض 1 × ${w1} + فرض 2 × ${w2} + اختبار × ${w3}) ÷ الأوزان`;
-
-      let numerator = 0;
-      let denominator = 0;
-      const numTerms: string[] = [];
-
-      if (t1Norm !== null) {
-        numerator += t1Norm * w1;
-        denominator += w1;
-        numTerms.push(`${t1Norm} × ${w1}`);
-      }
-      if (t2Norm !== null) {
-        numerator += t2Norm * w2;
-        denominator += w2;
-        numTerms.push(`${t2Norm} × ${w2}`);
-      }
-      if (exNorm !== null) {
-        numerator += exNorm * w3;
-        denominator += w3;
-        numTerms.push(`${exNorm} × ${w3}`);
-      }
-
-      if (denominator > 0) {
-        calculatedAvg = numerator / denominator;
-        steps.push(`تطبيق الأوزان المخصصة: (${numTerms.join(' + ')}) ÷ ${denominator} = ${calculatedAvg.toFixed(2)} / 20`);
-      }
-      break;
-    }
-
-    default: {
-      // Fallback to tests_avg_plus_exam_x2_div_3
-      const testsAvg = t1Norm !== null && t2Norm !== null ? (t1Norm + t2Norm) / 2 : (t1Norm ?? t2Norm);
-      if (testsAvg !== null && exNorm !== null) {
-        calculatedAvg = (testsAvg + exNorm * 2) / 3;
-      } else {
-        calculatedAvg = testsAvg ?? exNorm;
-      }
-      break;
-    }
+  if (evalResult.value !== null) {
+    calculatedAvg = evalResult.value;
+    steps.push(...evalResult.steps);
+  } else {
+    steps.push(evalResult.error || 'تعذر حساب المعادلة نظراً لغياب بعض العلامات المطلوبة.');
   }
 
+  const rawAvg = calculatedAvg !== null ? calculatedAvg : null;
   const finalAvg = calculatedAvg !== null ? Math.round(calculatedAvg * 100) / 100 : null;
-  const weightedTotal = finalAvg !== null && coeff !== null ? Math.round(finalAvg * coeff * 100) / 100 : null;
+  // النقطة بالمعامل = معدل المادة × معامل المادة (مع الاحتفاظ بالقيمة الدقيقة لمعدل المادة داخلياً لتجنب أخطاء التقريب)
+  const weightedTotal = rawAvg !== null && coeff !== null ? Math.round(rawAvg * coeff * 100) / 100 : null;
+  // التقدير يتم تحديده اعتماداً على معدل المادة (/20) فقط، وليس النقطة بالمعامل
   const appraisal = finalAvg !== null ? getAlgerianAppraisal(finalAvg) : null;
 
   if (finalAvg !== null) {
-    steps.push(`الناتج النهائي لمعدل المادة: ${finalAvg.toFixed(2)} / 20 (${appraisal?.label || ''})`);
+    steps.push(`الناتج النهائي لمعدل المادة (/20): ${finalAvg.toFixed(2)} / 20 (${appraisal?.label || ''})`);
     if (coeff !== null) {
-      steps.push(`المجموع الموزون بمعامل المادة (${coeff}): ${finalAvg.toFixed(2)} × ${coeff} = ${weightedTotal?.toFixed(2)} نقطة`);
+      steps.push(`النقطة بالمعامل (${coeff}): ${rawAvg.toFixed(3)} × ${coeff} = ${weightedTotal?.toFixed(2)}`);
     } else {
-      steps.push('معامل المادة غير محدد (لم يتم حساب المجموع الموزون).');
+      steps.push('معامل المادة غير محدد (لم يتم حساب النقطة بالمعامل).');
     }
   }
 
   return {
     averageOutOf20: finalAvg,
+    rawAverageOutOf20: rawAvg,
     coefficient: coeff,
     weightedTotal,
     appraisal,
     methodName,
     methodFormula,
     calculationSteps: steps,
-    test1: { rawScore: t1Raw, maxScore: t1Max, normalizedScore: t1Norm, isAbsent: test1.isAbsent, note: test1.note, assessmentTitle: test1.title },
-    test2: { rawScore: t2Raw, maxScore: t2Max, normalizedScore: t2Norm, isAbsent: test2.isAbsent, note: test2.note, assessmentTitle: test2.title },
+    continuous: { rawScore: contRaw, maxScore: contMax, normalizedScore: contNorm, isAbsent: continuous?.isAbsent, note: continuous?.note, assessmentTitle: continuous?.title },
+    test1: { rawScore: t1Raw, maxScore: 20, normalizedScore: t1Norm, isAbsent: test1.isAbsent, note: test1.note, assessmentTitle: test1.title },
+    test2: { rawScore: t2Raw, maxScore: 20, normalizedScore: t2Norm, isAbsent: test2.isAbsent, note: test2.note, assessmentTitle: test2.title },
     exam: { rawScore: exRaw, maxScore: exMax, normalizedScore: exNorm, isAbsent: exam.isAbsent, note: exam.note, assessmentTitle: exam.title },
     completedCount,
   };
@@ -466,7 +352,9 @@ export function calculateSubjectGrade(
 
 export interface StudentCalculationResult {
   studentId: string;
-  average: number | null; // Calculated out of 20
+  average: number | null; // Calculated out of 20 (معدل المادة / 20)
+  rawAverage?: number | null; // القيمة الأصلية الدقيقة لمعدل المادة قبل التقريب
+  weightedScore?: number | null; // النقطة بالمعامل = معدل المادة × معامل المادة
   appraisal: AlgerianAppraisal | null;
   completedCount: number;
   absentCount: number;
@@ -487,12 +375,18 @@ export function calculateStudentAverage(
   let completedCount = 0;
   let absentCount = 0;
 
-  // Identify Test 1, Test 2, and Exam specifically
+  // Identify Continuous, Test 1, Test 2, and Exam specifically
+  let continuousAssessment: AssessmentItem | null = null;
   let test1Assessment: AssessmentItem | null = null;
   let test2Assessment: AssessmentItem | null = null;
   let examAssessment: AssessmentItem | null = null;
 
   assessments.forEach((assessment) => {
+    const isTest1 = assessment.type === 'test1' || (assessment.title && (assessment.title.includes('الفرض الأول') || assessment.title.includes('فرض 1')));
+    const isTest2 = assessment.type === 'test2' || (assessment.title && (assessment.title.includes('الفرض الثاني') || assessment.title.includes('فرض 2')));
+    const isAnyTest = isTest1 || isTest2;
+    const effectiveAssessmentMax = isAnyTest ? 20 : (assessment.maxScore || 20);
+
     const record = assessment.grades?.[studentId];
     if (record) {
       if (record.isAbsent) {
@@ -505,7 +399,10 @@ export function calculateStudentAverage(
         };
       } else if (typeof record.score === 'number' && !isNaN(record.score)) {
         completedCount++;
-        const normalized = normalizeTo20(record.score, assessment.maxScore || 20);
+        // للفرض الأول والفرض الثاني: العلامة من 20 مباشرة ولا تقسم على 40
+        const normalized = isAnyTest
+          ? Math.round(record.score * 100) / 100
+          : normalizeTo20(record.score, effectiveAssessmentMax);
         scoresByAssessmentId[assessment.id] = {
           scoreOutOf20: normalized,
           rawScore: record.score,
@@ -528,8 +425,10 @@ export function calculateStudentAverage(
       };
     }
 
-    // Classify into test1, test2, exam (Strict constraint: NO test 3!)
-    if (assessment.type === 'test1') {
+    // Classify into continuous, test1, test2, exam
+    if (assessment.type === 'continuous' || (assessment.title || '').includes('تقويم')) {
+      if (!continuousAssessment) continuousAssessment = assessment;
+    } else if (assessment.type === 'test1') {
       test1Assessment = assessment;
     } else if (assessment.type === 'test2') {
       test2Assessment = assessment;
@@ -547,6 +446,7 @@ export function calculateStudentAverage(
   });
 
   // Calculate detailed subject grade
+  const contRecord = continuousAssessment ? (continuousAssessment as AssessmentItem).grades?.[studentId] : undefined;
   const t1Record = test1Assessment ? (test1Assessment as AssessmentItem).grades?.[studentId] : undefined;
   const t2Record = test2Assessment ? (test2Assessment as AssessmentItem).grades?.[studentId] : undefined;
   const exRecord = examAssessment ? (examAssessment as AssessmentItem).grades?.[studentId] : undefined;
@@ -554,14 +454,14 @@ export function calculateStudentAverage(
   const subjectDetail = calculateSubjectGrade(
     {
       rawScore: t1Record?.score,
-      maxScore: test1Assessment ? (test1Assessment as AssessmentItem).maxScore : 20,
+      maxScore: 20, // الفرض الأول دائمًا من 20 رسمياً
       isAbsent: t1Record?.isAbsent,
       note: t1Record?.note,
       title: test1Assessment ? (test1Assessment as AssessmentItem).title : undefined,
     },
     {
       rawScore: t2Record?.score,
-      maxScore: test2Assessment ? (test2Assessment as AssessmentItem).maxScore : 20,
+      maxScore: 20, // الفرض الثاني دائمًا من 20 رسمياً
       isAbsent: t2Record?.isAbsent,
       note: t2Record?.note,
       title: test2Assessment ? (test2Assessment as AssessmentItem).title : undefined,
@@ -573,13 +473,30 @@ export function calculateStudentAverage(
       note: exRecord?.note,
       title: examAssessment ? (examAssessment as AssessmentItem).title : undefined,
     },
-    subjectSetting
+    subjectSetting,
+    {
+      rawScore: contRecord?.score,
+      maxScore: continuousAssessment ? (continuousAssessment as AssessmentItem).maxScore : 20,
+      isAbsent: contRecord?.isAbsent,
+      note: contRecord?.note,
+      title: continuousAssessment ? (continuousAssessment as AssessmentItem).title : undefined,
+    }
   );
+
+  const coeff = (typeof subjectDetail.coefficient === 'number' && subjectDetail.coefficient > 0)
+    ? subjectDetail.coefficient
+    : (subjectSetting?.coefficient || 1);
+  const rawAvg = subjectDetail.rawAverageOutOf20 ?? subjectDetail.averageOutOf20;
+  const weightedScore = subjectDetail.weightedTotal !== null && subjectDetail.weightedTotal !== undefined
+    ? subjectDetail.weightedTotal
+    : (rawAvg !== null ? Math.round(rawAvg * coeff * 100) / 100 : null);
 
   if (completedCount === 0) {
     return {
       studentId,
       average: null,
+      rawAverage: null,
+      weightedScore: null,
       appraisal: null,
       completedCount,
       absentCount,
@@ -588,118 +505,16 @@ export function calculateStudentAverage(
     };
   }
 
-  // If subjectSetting is provided or formula is 'subject_method', use subjectDetail.averageOutOf20!
-  if (subjectSetting || formula === 'subject_method') {
-    return {
-      studentId,
-      average: subjectDetail.averageOutOf20,
-      appraisal: subjectDetail.appraisal,
-      completedCount,
-      absentCount,
-      scoresByAssessmentId,
-      subjectCalculation: subjectDetail,
-    };
-  }
-
-  let finalAverage: number | null = null;
-
-  if (formula === 'arithmetic') {
-    // Simple average of completed assessments
-    let sum = 0;
-    assessments.forEach((a) => {
-      const scoreObj = scoresByAssessmentId[a.id];
-      if (scoreObj && scoreObj.scoreOutOf20 !== null) {
-        sum += scoreObj.scoreOutOf20;
-      }
-    });
-    finalAverage = Math.round((sum / completedCount) * 100) / 100;
-  } else if (formula === 'standard_algerian') {
-    // Official Algerian Ministerial Formula:
-    // Continuous = mean of continuous & activities
-    // Tests = mean of tests
-    // Exam = exam score * exam coeff (default 2 or its coeff)
-    // Formula = (Continuous + Tests + Exam * 2) / (1 + 1 + 2)
-    const continuousScores: number[] = [];
-    const testScores: number[] = [];
-    let examScore: number | null = null;
-    let examCoeff = 2;
-
-    assessments.forEach((a) => {
-      const scoreObj = scoresByAssessmentId[a.id];
-      if (scoreObj && scoreObj.scoreOutOf20 !== null) {
-        if (a.type === 'continuous' || a.type === 'activity') {
-          continuousScores.push(scoreObj.scoreOutOf20);
-        } else if (a.type === 'test') {
-          testScores.push(scoreObj.scoreOutOf20);
-        } else if (a.type === 'exam') {
-          examScore = scoreObj.scoreOutOf20;
-          examCoeff = (typeof a.coefficient === 'number' && a.coefficient > 0) ? a.coefficient : 2;
-        }
-      }
-    });
-
-    let numerator = 0;
-    let denominator = 0;
-
-    if (continuousScores.length > 0) {
-      const contAvg = continuousScores.reduce((acc, v) => acc + v, 0) / continuousScores.length;
-      numerator += contAvg * 1;
-      denominator += 1;
-    }
-
-    if (testScores.length > 0) {
-      const testAvg = testScores.reduce((acc, v) => acc + v, 0) / testScores.length;
-      numerator += testAvg * 1;
-      denominator += 1;
-    }
-
-    if (examScore !== null) {
-      numerator += examScore * examCoeff;
-      denominator += examCoeff;
-    }
-
-    if (denominator > 0) {
-      finalAverage = Math.round((numerator / denominator) * 100) / 100;
-    } else {
-      // fallback to weighted
-      let weightedSum = 0;
-      let coeffSum = 0;
-      assessments.forEach((a) => {
-        const scoreObj = scoresByAssessmentId[a.id];
-        if (scoreObj && scoreObj.scoreOutOf20 !== null) {
-          const c = a.coefficient > 0 ? a.coefficient : 1;
-          weightedSum += scoreObj.scoreOutOf20 * c;
-          coeffSum += c;
-        }
-      });
-      finalAverage = coeffSum > 0 ? Math.round((weightedSum / coeffSum) * 100) / 100 : null;
-    }
-  } else {
-    // 'weighted' (default & flexible)
-    let weightedSum = 0;
-    let coeffSum = 0;
-
-    assessments.forEach((a) => {
-      const scoreObj = scoresByAssessmentId[a.id];
-      if (scoreObj && scoreObj.scoreOutOf20 !== null) {
-        const c = a.coefficient > 0 ? a.coefficient : 1;
-        weightedSum += scoreObj.scoreOutOf20 * c;
-        coeffSum += c;
-      }
-    });
-
-    finalAverage = coeffSum > 0 ? Math.round((weightedSum / coeffSum) * 100) / 100 : null;
-  }
-
-  const appraisal = finalAverage !== null ? getAlgerianAppraisal(finalAverage) : null;
-
   return {
     studentId,
-    average: finalAverage,
-    appraisal,
+    average: subjectDetail.averageOutOf20,
+    rawAverage: rawAvg,
+    weightedScore,
+    appraisal: subjectDetail.appraisal,
     completedCount,
     absentCount,
     scoresByAssessmentId,
+    subjectCalculation: subjectDetail,
   };
 }
 
@@ -712,6 +527,8 @@ export interface ClassGradesReport {
     rank: number | null;
   })[];
   classAverage: number | null;
+  classWeightedAverage?: number | null;
+  totalWeightedSum?: number | null;
   highestAverage: { value: number; studentName: string } | null;
   lowestAverage: { value: number; studentName: string } | null;
   passCount: number; // >= 10
@@ -789,9 +606,22 @@ export function computeClassGradesReport(
     passRate = Math.round((passCount / totalEvaluated) * 100);
   }
 
+  // Calculate class weighted totals
+  const validWeighted = finalStudentResults
+    .map((s) => s.weightedScore)
+    .filter((w): w is number => typeof w === 'number' && !isNaN(w));
+  let classWeightedAverage: number | null = null;
+  let totalWeightedSum: number | null = null;
+  if (validWeighted.length > 0) {
+    totalWeightedSum = Math.round(validWeighted.reduce((a, b) => a + b, 0) * 100) / 100;
+    classWeightedAverage = Math.round((totalWeightedSum / validWeighted.length) * 100) / 100;
+  }
+
   return {
     studentResults: finalStudentResults,
     classAverage,
+    classWeightedAverage,
+    totalWeightedSum,
     highestAverage,
     lowestAverage,
     passCount,
@@ -823,7 +653,9 @@ export function computeAssessmentStats(assessment: AssessmentItem, students: Stu
       if (rec.isAbsent) {
         absentCount++;
       } else if (typeof rec.score === 'number' && !isNaN(rec.score)) {
-        validScores.push(normalizeTo20(rec.score, assessment.maxScore || 20));
+        const isTest = assessment.type === 'test1' || assessment.type === 'test2' || (assessment.title && (assessment.title.includes('الفرض الأول') || assessment.title.includes('الفرض الثاني') || assessment.title.includes('فرض 1') || assessment.title.includes('فرض 2')));
+        const effMax = isTest ? 20 : (assessment.maxScore || 20);
+        validScores.push(isTest ? Math.round(rec.score * 100) / 100 : normalizeTo20(rec.score, effMax));
       }
     }
   });
